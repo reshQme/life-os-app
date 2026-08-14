@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Life-OS</title>
+<style>
+  :root{ --bg:#f6f5f1; --card:#fffdf9; --ink:#2c2a27; --muted:#9b958c;
+         --line:#e7e3da; --accent:#b4730b; --hl:#fff6e3; --hlline:#eccf91;
+         --ok:#3c7a44; --danger:#a33326; }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#15140f; --card:#1d1b16; --ink:#ece8df; --muted:#857f74;
+           --line:#2a2820; --accent:#e2a23a; --hl:#2a2316; --hlline:#5a4a26;
+           --ok:#6fb877; --danger:#d96a5c; }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);
+       font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+       padding:max(14px,env(safe-area-inset-top)) 14px 80px;}
+  .wrap{max-width:720px;margin:0 auto}
+  header{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+  header h1{font-size:16px;margin:0;letter-spacing:.02em}
+  #hdr-date{font-size:12px;color:var(--muted);font-weight:600}
+  .live{margin-left:auto;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}
+  .live .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .live.err .dot{background:var(--danger)}
+  button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);
+         border-radius:8px;padding:6px 12px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.ghost{border:none;background:none;color:var(--muted)}
+  .toolbar-row{display:flex;gap:8px;margin:10px 0}
+  input[type=text],input[type=password]{font:inherit;flex:1;min-width:0;background:var(--card);color:var(--ink);
+    border:1px solid var(--line);border-radius:10px;padding:9px 12px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .highlight{background:var(--hl);border:1px solid var(--hlline);border-radius:12px;
+             padding:11px 13px;font-size:14px;margin:10px 0 14px}
+  .highlight .tag{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;
+                  color:var(--accent);font-weight:700;margin-bottom:3px}
+  section{margin:0 0 20px}
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+     font-weight:700;margin:0 0 6px;padding-bottom:5px;border-bottom:1px solid var(--line);
+     display:flex;align-items:center;gap:8px}
+  .count{margin-left:auto;background:var(--line);color:var(--ink);font-size:11px;
+         padding:1px 8px;border-radius:10px;font-weight:700}
+  .plan-row{padding:6px 2px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;font-size:14px}
+  .plan-row.sub{padding-left:18px;font-size:13px;color:var(--muted);border-bottom:none}
+  .proj{margin:0 0 4px}
+  .proj summary{cursor:pointer;list-style:none;font-size:13px;font-weight:700;padding:7px 2px;
+                display:flex;align-items:center;gap:6px;-webkit-user-select:none;user-select:none}
+  .proj summary::-webkit-details-marker{display:none}
+  .proj summary::before{content:"▸";color:var(--accent);font-size:11px}
+  .proj[open] summary::before{content:"▾"}
+  .proj summary .n{background:var(--line);color:var(--muted);font-size:10px;padding:0 7px;border-radius:8px;font-weight:700;margin-left:auto}
+  .item{border-bottom:1px solid var(--line)}
+  .item .row{display:flex;gap:10px;align-items:flex-start;padding:9px 2px;cursor:pointer;
+             -webkit-tap-highlight-color:transparent}
+  .item .box{flex:0 0 auto;width:20px;height:20px;border:2px solid var(--accent);border-radius:50%;
+             margin-top:1px;opacity:.75}
+  .item .txt{flex:1;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+  .item .src{flex:0 0 auto;font-size:10px;color:var(--muted);border:1px solid var(--line);
+             border-radius:8px;padding:0 6px;margin-top:3px;white-space:nowrap}
+  .item .confirm{display:none;gap:8px;padding:0 2px 10px 32px}
+  .item.arm .confirm{display:flex}
+  .item.arm .row{background:var(--hl)}
+  .item.gone{display:none}
+  .empty{color:var(--muted);font-size:13px;padding:8px 2px;font-style:italic}
+  #toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);
+         background:var(--ink);color:var(--bg);border-radius:12px;padding:10px 16px;font-size:13px;
+         display:none;align-items:center;gap:12px;box-shadow:0 4px 18px rgba(0,0,0,.25);max-width:92vw;z-index:50}
+  #toast.show{display:flex}
+  #toast button{background:none;border:none;color:var(--accent);font-weight:700;padding:0}
+  #setup{max-width:520px;margin:8vh auto 0;background:var(--card);border:1px solid var(--line);
+         border-radius:14px;padding:22px}
+  #setup h1{font-size:18px;margin:0 0 10px}
+  #setup p{font-size:13.5px;color:var(--muted);line-height:1.55}
+  #setup code{background:var(--line);padding:1px 5px;border-radius:4px;font-size:12px}
+  .footer{color:var(--muted);font-size:11px;text-align:center;margin-top:26px;line-height:1.7}
+  .footer a{color:var(--accent);text-decoration:none;font-weight:600}
+  #err{background:var(--danger);color:#fff;border-radius:10px;padding:9px 12px;font-size:13px;
+       font-weight:600;display:none;margin:10px 0}
+</style>
+</head>
+<body>
+
+<div id="setup" style="display:none">
+  <h1>Life-OS — connect</h1>
+  <p>This app reads and writes your <b>private</b> <code>reshQme/life-os</code> repo directly.
+     Paste your fine-grained GitHub token (the same kind the Back&nbsp;Tap shortcut uses:
+     only the life-os repo, Contents read&nbsp;&amp;&nbsp;write). It is stored <b>only on this
+     device</b>, never in any code.</p>
+  <div class="toolbar-row" style="margin-top:14px">
+    <input type="password" id="tok-in" placeholder="github_pat_…" autocomplete="off">
+  </div>
+  <div class="toolbar-row">
+    <button class="primary" id="tok-save" style="flex:1">Connect</button>
+  </div>
+  <p id="tok-msg"></p>
+</div>
+
+<div class="wrap" id="app" style="display:none">
+  <header>
+    <h1>Life-OS</h1>
+    <span id="hdr-date"></span>
+    <span class="live" id="live"><span class="dot"></span><span id="live-txt">live</span></span>
+    <button class="ghost" id="btn-refresh" title="Refresh">↻</button>
+    <button class="ghost" id="btn-gear" title="Settings">⚙︎</button>
+  </header>
+  <div id="err"></div>
+
+  <div class="toolbar-row">
+    <input type="text" id="add-in" placeholder="Add to inbox…" autocomplete="off" enterkeyhint="done">
+    <button class="primary" id="add-btn">Add</button>
+  </div>
+  <div class="toolbar-row" style="margin-top:0">
+    <input type="text" id="search" placeholder="Search everything…" autocomplete="off">
+  </div>
+
+  <div id="content"></div>
+
+  <div class="footer">
+    Every change is a commit to <b>life-os</b> — done items move to the log, nothing is lost.<br>
+    <a href="https://claude.ai/code/artifact/4bc92de1-d607-4b7a-b272-032bcf9da36f">📰 The Reshma Times</a> ·
+    <a href="https://claude.ai/code/artifact/36e0f2cd-23ab-4c14-baa4-5b8822246981">read-only backup page</a>
+  </div>
+</div>
+
+<div id="toast"><span id="toast-txt"></span><button id="toast-undo">UNDO</button></div>
+
+<script>
+'use strict';
+const OWNER='reshQme', REPO='life-os';
+const API=`https://api.github.com/repos/${OWNER}/${REPO}`;
+let token=localStorage.getItem('lifeos_token')||'';
+
+/* ---------- GitHub plumbing ---------- */
+async function gh(path,opts={}){
+  const r=await fetch(API+path,{...opts,cache:'no-store',
+    headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json',
+             'X-GitHub-Api-Version':'2022-11-28',...(opts.headers||{})}});
+  if(!r.ok){const t=await r.text();throw new Error('GitHub '+r.status+': '+t.slice(0,160));}
+  return r.status===204?null:r.json();
+}
+function b64dec(b64){const bin=atob(b64.replace(/\s/g,''));const a=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new TextDecoder().decode(a);}
+function b64enc(str){const bytes=new TextEncoder().encode(str);let bin='';
+  for(const b of bytes)bin+=String.fromCharCode(b);return btoa(bin);}
+async function getFile(path){const j=await gh('/contents/'+path);return{path,text:b64dec(j.content),sha:j.sha};}
+async function putFile(path,text,sha,message){
+  const body={message,content:b64enc(text)};if(sha)body.sha=sha;
+  const j=await gh('/contents/'+path,{method:'PUT',body:JSON.stringify(body)});
+  return j.content?j.content.sha:null;}
+async function delFile(path,sha,message){
+  return gh('/contents/'+path,{method:'DELETE',body:JSON.stringify({message,sha})});}
+
+/* ---------- state ---------- */
+const S={files:{},captures:[],lastLoad:0};
+
+async function loadAll(){
+  setLive('loading…',false);
+  const [inbox,tasks,today,log]=await Promise.all([
+    getFile('inbox.md'),getFile('tasks.md'),getFile('today.md'),getFile('log.md')]);
+  S.files={ 'inbox.md':inbox,'tasks.md':tasks,'today.md':today,'log.md':log };
+  let caps=[];
+  try{
+    const list=await gh('/contents/captures');
+    caps=await Promise.all(list.filter(f=>/\.(md|txt)$/.test(f.name))
+      .map(async f=>{const g=await getFile('captures/'+f.name);return{name:f.name,text:g.text.trim(),sha:g.sha};}));
+  }catch(e){/* captures dir may be empty */}
+  S.captures=caps.filter(c=>c.text);
+  S.lastLoad=Date.now();
+  render();
+  setLive('live · '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}),false);
+}
+
+/* ---------- parsers (ported from build-today-html.js) ---------- */
+function parseInbox(md){
+  const out=[];let past=false;
+  for(const raw of md.split('\n')){
+    if(raw.trim()==='---'){past=true;continue;}
+    if(!past)continue;
+    const m=raw.match(/^-\s+(.*\S.*)$/);
+    if(m)out.push(m[1].trim());
+  }
+  return out;
+}
+function parseTasks(md){
+  const groups={};let g=null,p=null;
+  for(const raw of md.split('\n')){
+    const h1=raw.match(/^#\s+(Professional|Personal)\s*$/);
+    if(h1){g=h1[1];groups[g]=[];p=null;continue;}
+    const h2=raw.match(/^##\s+(.*\S)\s*$/);
+    if(h2&&g){p={name:h2[1],items:[]};groups[g].push(p);continue;}
+    const it=raw.match(/^-\s+\[\s\]\s+(.*\S.*)$/);
+    if(it&&p)p.items.push(it[1].trim());
+  }
+  return groups;
+}
+function parseToday(md){
+  const t={date:'',highlight:'',plan:[]};
+  const dm=md.match(/^#\s+Today\s+—\s+(\S+)/m);if(dm)t.date=dm[1];
+  const hm=md.match(/##\s*Highlight\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/);
+  if(hm)t.highlight=hm[1].trim().split('\n')[0];
+  const pm=md.match(/##\s*Plan\s*\n([\s\S]*?)(?=\n##\s|\n*$)/);
+  if(pm)for(const line of pm[1].split('\n')){
+    let m=line.match(/^-\s+(.*\S.*)$/);
+    if(m){t.plan.push({text:m[1],sub:false});continue;}
+    m=line.match(/^\s{2,}-\s+(.*\S.*)$/);
+    if(m)t.plan.push({text:m[1],sub:true});
+  }
+  return t;
+}
+const QW_VERB=/^(buy|order|message|text|call|email|contact|reply|refill|use|check|decide|ship|book|pay|send)\b/i;
+
+/* ---------- rendering ---------- */
+function md(s){ // minimal inline markdown: bold + strip links
+  return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>');
+}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function itemRow(text,src,kind,meta){
+  const div=document.createElement('div');
+  div.className='item';div.dataset.search=text.toLowerCase();
+  div.innerHTML=`<div class="row"><span class="box"></span><span class="txt">${md(text)}</span>`+
+    (src?`<span class="src">${esc(src)}</span>`:'')+`</div>`+
+    `<div class="confirm"><button class="primary btn-done">✓ Done</button><button class="btn-no">Cancel</button></div>`;
+  const row=div.querySelector('.row');
+  row.onclick=()=>{document.querySelectorAll('.item.arm').forEach(x=>x!==div&&x.classList.remove('arm'));
+                   div.classList.toggle('arm');};
+  div.querySelector('.btn-no').onclick=e=>{e.stopPropagation();div.classList.remove('arm');};
+  div.querySelector('.btn-done').onclick=e=>{e.stopPropagation();div.classList.remove('arm');div.classList.add('gone');
+    markDone(kind,text,meta,div);};
+  return div;
+}
+function render(){
+  const c=document.getElementById('content');c.innerHTML='';
+  const today=parseToday(S.files['today.md'].text);
+  const inbox=parseInbox(S.files['inbox.md'].text);
+  const tasks=parseTasks(S.files['tasks.md'].text);
+  document.getElementById('hdr-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+
+  if(today.highlight){
+    const h=document.createElement('div');h.className='highlight';
+    h.innerHTML='<span class="tag">Highlight'+(today.date?' · plan of '+esc(today.date):'')+'</span>'+md(today.highlight);
+    c.appendChild(h);
+  }
+  // quick wins
+  const qw=inbox.filter(t=>QW_VERB.test(t)&&t.length<95&&!/🚨|←|clarify/i.test(t)).slice(0,10);
+  if(qw.length){
+    const s=sec('⚡ 5-minute counter',qw.length);
+    qw.forEach(t=>s.appendChild(itemRow(t,'inbox','inbox')));
+    c.appendChild(s);
+  }
+  // plan
+  if(today.plan.length){
+    const s=sec("Today's plan",null);
+    today.plan.forEach(b=>{const d=document.createElement('div');
+      d.className='plan-row'+(b.sub?' sub':'');d.dataset.search=b.text.toLowerCase();
+      d.innerHTML=md(b.text);s.appendChild(d);});
+    c.appendChild(s);
+  }
+  // backlog
+  for(const g of ['Professional','Personal']){
+    const projs=(tasks[g]||[]).filter(p=>p.items.length);
+    if(!projs.length)continue;
+    const total=projs.reduce((n,p)=>n+p.items.length,0);
+    const s=sec('Backlog · '+g,total);
+    for(const p of projs){
+      const det=document.createElement('details');det.className='proj';det.open=true;
+      det.innerHTML=`<summary>${esc(p.name)}<span class="n">${p.items.length}</span></summary>`;
+      p.items.forEach(t=>det.appendChild(itemRow(t,null,'task',{project:p.name})));
+      s.appendChild(det);
+    }
+    c.appendChild(s);
+  }
+  // inbox panel: newest first, captures on top
+  const s=sec('Inbox — newest first',inbox.length+S.captures.length);
+  [...S.captures].reverse().forEach(cp=>s.appendChild(itemRow(cp.text,'📥 back tap','capture',{name:cp.name,sha:cp.sha})));
+  [...inbox].reverse().forEach((t)=>s.appendChild(itemRow(t,null,'inbox')));
+  if(!inbox.length&&!S.captures.length)s.insertAdjacentHTML('beforeend','<div class="empty">Inbox zero. Frame it.</div>');
+  c.appendChild(s);
+  applySearch();
+}
+function sec(title,count){
+  const s=document.createElement('section');
+  s.innerHTML=`<h2>${title}${count!=null?` <span class="count">${count}</span>`:''}</h2>`;
+  return s;
+}
+
+/* ---------- actions ---------- */
+function stamp(){const d=new Date();
+  return d.toISOString().slice(0,10)+' '+d.toTimeString().slice(0,5);}
+let undoFn=null,toastTimer=null;
+function toast(msg,undo){
+  const t=document.getElementById('toast');
+  document.getElementById('toast-txt').textContent=msg;
+  document.getElementById('toast-undo').style.display=undo?'':'none';
+  undoFn=undo||null;
+  t.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),undo?8000:3500);
+}
+document.getElementById('toast-undo').onclick=async()=>{
+  document.getElementById('toast').classList.remove('show');
+  if(undoFn){const f=undoFn;undoFn=null;try{await f();await loadAll();toast('Restored.');}
+    catch(e){showErr(e);}}
+};
+async function appendLog(line){
+  const log=await getFile('log.md');
+  await putFile('log.md',log.text.replace(/\n*$/,'\n')+line+'\n',log.sha,'Log: done via app');
+}
+async function markDone(kind,text,meta,el){
+  try{
+    if(kind==='inbox'){
+      const f=await getFile('inbox.md');
+      const lines=f.text.split('\n');
+      const idx=lines.findIndex(l=>l.match(/^-\s+/)&&l.replace(/^-\s+/,'').trim()===text);
+      if(idx<0)throw new Error('Item not found in inbox.md — refresh and retry');
+      const removed=lines.splice(idx,1)[0];
+      await putFile('inbox.md',lines.join('\n'),f.sha,'Done via app: '+text.slice(0,60));
+      await appendLog(`- ${stamp()} — Done (via app): ${text}`);
+      toast('Done — moved to the log.',async()=>{
+        const g=await getFile('inbox.md');const ls=g.text.split('\n');
+        ls.splice(Math.min(idx,ls.length),0,removed);
+        await putFile('inbox.md',ls.join('\n'),g.sha,'Undo via app');
+      });
+    }else if(kind==='task'){
+      const f=await getFile('tasks.md');
+      const lines=f.text.split('\n');
+      const idx=lines.findIndex(l=>l.match(/^-\s+\[\s\]\s+/)&&l.replace(/^-\s+\[\s\]\s+/,'').trim()===text);
+      if(idx<0)throw new Error('Item not found in tasks.md — refresh and retry');
+      const removed=lines.splice(idx,1)[0];
+      await putFile('tasks.md',lines.join('\n'),f.sha,'Done via app: '+text.slice(0,60));
+      await appendLog(`- ${stamp()} — Done (via app, ${meta.project}): ${text}`);
+      toast('Done — moved to the log.',async()=>{
+        const g=await getFile('tasks.md');const ls=g.text.split('\n');
+        ls.splice(Math.min(idx,ls.length),0,removed);
+        await putFile('tasks.md',ls.join('\n'),g.sha,'Undo via app');
+      });
+    }else if(kind==='capture'){
+      await delFile('captures/'+meta.name,meta.sha,'Done via app (capture): '+text.slice(0,60));
+      await appendLog(`- ${stamp()} — Done (via app, back-tap capture): ${text}`);
+      const saved=text;
+      toast('Done — capture cleared.',async()=>{
+        await putFile('captures/'+meta.name,saved+'\n',null,'Undo via app');
+      });
+    }
+    loadAll();
+  }catch(e){el&&el.classList.remove('gone');showErr(e);}
+}
+document.getElementById('add-btn').onclick=addItem;
+document.getElementById('add-in').addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
+async function addItem(){
+  const inp=document.getElementById('add-in');
+  const v=inp.value.trim();if(!v)return;
+  inp.value='';inp.blur();
+  try{
+    const f=await getFile('inbox.md');
+    await putFile('inbox.md',f.text.replace(/\n*$/,'\n')+'- '+v+'\n',f.sha,'Add via app: '+v.slice(0,60));
+    toast('Captured.');loadAll();
+  }catch(e){inp.value=v;showErr(e);}
+}
+
+/* ---------- search ---------- */
+document.getElementById('search').addEventListener('input',applySearch);
+function applySearch(){
+  const q=document.getElementById('search').value.trim().toLowerCase();
+  document.querySelectorAll('[data-search]').forEach(el=>{
+    el.style.display=!q||el.dataset.search.includes(q)?'':'none';});
+  document.querySelectorAll('details.proj').forEach(d=>{
+    const any=[...d.querySelectorAll('.item')].some(i=>i.style.display!=='none'&&!i.classList.contains('gone'));
+    d.style.display=q&&!any?'none':'';if(q&&any)d.open=true;});
+}
+
+/* ---------- shell ---------- */
+function setLive(txt,err){const l=document.getElementById('live');
+  l.classList.toggle('err',!!err);document.getElementById('live-txt').textContent=txt;}
+function showErr(e){const el=document.getElementById('err');
+  el.style.display='block';el.textContent=String(e.message||e);
+  setLive('error',true);setTimeout(()=>{el.style.display='none';},9000);}
+document.getElementById('btn-refresh').onclick=()=>loadAll().catch(showErr);
+document.getElementById('btn-gear').onclick=()=>{
+  if(confirm('Forget the token on this device?')){localStorage.removeItem('lifeos_token');location.reload();}};
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&Date.now()-S.lastLoad>30_000)loadAll().catch(showErr);});
+
+async function boot(){
+  if(!token){
+    document.getElementById('setup').style.display='block';
+    document.getElementById('tok-save').onclick=async()=>{
+      const v=document.getElementById('tok-in').value.trim();
+      const msg=document.getElementById('tok-msg');
+      if(!v){msg.textContent='Paste a token first.';return;}
+      token=v;msg.textContent='Checking…';
+      try{await gh('/contents/inbox.md',{method:'HEAD'});}catch(e){
+        try{await gh('');}catch(e2){msg.textContent='That token can’t open the repo: '+e2.message;token='';return;}}
+      localStorage.setItem('lifeos_token',v);location.reload();
+    };
+    return;
+  }
+  document.getElementById('app').style.display='block';
+  try{await loadAll();}catch(e){showErr(e);}
+}
+boot();
+</script>
+</body>
+</html>
