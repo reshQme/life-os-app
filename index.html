@@ -170,6 +170,7 @@ async function loadAll(){
       .map(async f=>{const g=await getFile('captures/'+f.name);return{name:f.name,text:g.text.trim(),sha:g.sha};}));
   }catch(e){/* captures dir may be empty */}
   S.captures=caps.filter(c=>c.text);
+  S.emptyCaps=caps.length-S.captures.length;
   S.lastLoad=Date.now();
   render();
   setLive('live · '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}),false);
@@ -276,6 +277,8 @@ function render(){
   }
   // inbox panel: newest first, captures on top
   const s=sec('Inbox — newest first',inbox.length+S.captures.length);
+  if(S.emptyCaps)s.insertAdjacentHTML('beforeend',
+    `<div class="empty" style="color:var(--danger)">⚠ ${S.emptyCaps} empty capture file in the repo — a Back Tap misfired (blank dictation or date); check the shortcut.</div>`);
   [...S.captures].reverse().forEach(cp=>s.appendChild(itemRow(cp.text,'📥 back tap','capture',{name:cp.name,sha:cp.sha})));
   [...inbox].reverse().forEach((t)=>s.appendChild(itemRow(t,null,'inbox')));
   if(!inbox.length&&!S.captures.length)s.insertAdjacentHTML('beforeend','<div class="empty">Inbox zero. Frame it.</div>');
