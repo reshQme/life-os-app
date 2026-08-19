@@ -81,36 +81,6 @@
   .footer a{color:var(--accent);text-decoration:none;font-weight:600}
   #err{background:var(--danger);color:#fff;border-radius:10px;padding:9px 12px;font-size:13px;
        font-weight:600;display:none;margin:10px 0}
-  /* ---- v2: tray, stars, drag, sparkle ---- */
-  .tray{background:var(--hl);border:2px solid var(--hlline);border-radius:12px;padding:10px 12px;margin:0 0 16px}
-  .tray.over{border-style:dashed;border-color:var(--accent);background:var(--card)}
-  .tray h2{border-bottom-color:var(--hlline);color:var(--accent)}
-  .tray .empty{padding:10px 2px}
-  .tray .item{border-bottom:1px solid var(--hlline)}
-  .tray .item:last-child{border-bottom:none}
-  .tray .ord{flex:0 0 auto;font-size:11px;color:var(--accent);font-weight:700;
-             font-variant-numeric:tabular-nums;margin-top:3px;min-width:14px}
-  .grip{flex:0 0 auto;color:var(--muted);font-size:15px;line-height:1;padding:2px 4px;margin-top:1px;
-        cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;opacity:.55}
-  .grip:active{cursor:grabbing}
-  .star{flex:0 0 auto;background:none;border:none;padding:0 2px;margin-top:-1px;font-size:15px;
-        line-height:1;color:var(--line);cursor:pointer;-webkit-tap-highlight-color:transparent}
-  .star.on{color:var(--accent)}
-  .item.starred .txt{font-weight:600}
-  .drag-ghost{position:fixed;z-index:200;pointer-events:none;background:var(--card);
-    border:1px solid var(--accent);border-radius:10px;padding:8px 12px;font-size:13px;
-    max-width:70vw;box-shadow:0 6px 20px rgba(0,0,0,.3);opacity:.95}
-  .drop-line{height:2px;background:var(--accent);margin:0 2px}
-  #sparkle{margin-left:6px}
-  #sp-panel{background:var(--card);border:1px solid var(--hlline);border-radius:12px;
-            padding:12px 14px;margin:0 0 16px;display:none}
-  #sp-panel h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent)}
-  #sp-panel .sp-item{border-top:1px solid var(--line);padding:9px 0;font-size:13.5px;line-height:1.45}
-  #sp-panel .sp-item:first-of-type{border-top:none}
-  #sp-panel .sp-k{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
-  #sp-close{float:right}
-  .cap-age{font-size:11px;color:var(--muted)}
-  .cap-age.warn{color:var(--danger);font-weight:700}
 </style>
 </head>
 <body>
@@ -136,12 +106,9 @@
     <span id="hdr-date"></span>
     <span class="live" id="live"><span class="dot"></span><span id="live-txt">live</span></span>
     <button class="ghost" id="btn-refresh" title="Refresh">↻</button>
-    <button class="ghost" id="sparkle" title="Claude triage">✨</button>
     <button class="ghost" id="btn-gear" title="Settings">⚙︎</button>
   </header>
   <div id="err"></div>
-  <div class="cap-age" id="cap-age"></div>
-  <div id="sp-panel"><button class="ghost" id="sp-close">✕</button><h3>✨ Claude triage</h3><div id="sp-body"></div></div>
 
   <div class="toolbar-row">
     <input type="text" id="add-in" placeholder="Add to inbox…" autocomplete="off" enterkeyhint="done">
@@ -206,7 +173,6 @@ async function loadAll(){
   S.emptyCaps=caps.length-S.captures.length;
   S.lastLoad=Date.now();
   render();
-  refreshCaptureAge();
   setLive('live · '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}),false);
 }
 
@@ -233,20 +199,6 @@ function parseTasks(md){
   }
   return groups;
 }
-const STAR='\u2605';
-function isStar(t){return t.startsWith(STAR);}
-function bare(t){return t.replace(/^\u2605\s*/,'');}
-
-function parseCommitted(md){
-  const m=md.match(/##\s*Committed\s*\n([\s\S]*?)(?=\n##\s|\n*$)/);
-  if(!m)return[];
-  const out=[];
-  for(const line of m[1].split('\n')){
-    const g=line.match(/^-\s+(.*\S.*)$/);
-    if(g)out.push(g[1].trim());
-  }
-  return out;
-}
 function parseToday(md){
   const t={date:'',highlight:'',plan:[]};
   const dm=md.match(/^#\s+Today\s+—\s+(\S+)/m);if(dm)t.date=dm[1];
@@ -268,38 +220,18 @@ function md(s){ // minimal inline markdown: bold + strip links
   return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>');
 }
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function itemRow(text,src,kind,meta,opts){
-  opts=opts||{};
-  const starred=isStar(text), shown=bare(text);
+function itemRow(text,src,kind,meta){
   const div=document.createElement('div');
-  div.className='item'+(starred?' starred':'');
-  div.dataset.search=shown.toLowerCase();
-  div.dataset.text=text; div.dataset.kind=kind;
-  if(meta)div.dataset.meta=JSON.stringify(meta);
-  const ord=opts.ord!=null?`<span class="ord">${opts.ord}</span>`:'';
-  const grip=`<span class="grip" title="Drag">\u28ff</span>`;
-  const star=opts.inTray?'':`<button class="star${starred?' on':''}" title="Priority">\u2605</button>`;
-  div.innerHTML=`<div class="row">${ord}${grip}<span class="box"></span><span class="txt">${md(shown)}</span>`+
-    (src?`<span class="src">${esc(src)}</span>`:'')+star+`</div>`+
-    `<div class="confirm"><button class="primary btn-done">\u2713 Done</button>`+
-    (opts.inTray?`<button class="btn-uncommit">\u2193 Uncommit</button>`
-                :`<button class="btn-commit">\u2191 Commit</button>`)+
-    `<button class="btn-no">Cancel</button></div>`;
+  div.className='item';div.dataset.search=text.toLowerCase();
+  div.innerHTML=`<div class="row"><span class="box"></span><span class="txt">${md(text)}</span>`+
+    (src?`<span class="src">${esc(src)}</span>`:'')+`</div>`+
+    `<div class="confirm"><button class="primary btn-done">✓ Done</button><button class="btn-no">Cancel</button></div>`;
   const row=div.querySelector('.row');
-  row.onclick=e=>{
-    if(e.target.closest('.star')||e.target.closest('.grip'))return;
-    document.querySelectorAll('.item.arm').forEach(x=>x!==div&&x.classList.remove('arm'));
-    div.classList.toggle('arm');};
+  row.onclick=()=>{document.querySelectorAll('.item.arm').forEach(x=>x!==div&&x.classList.remove('arm'));
+                   div.classList.toggle('arm');};
   div.querySelector('.btn-no').onclick=e=>{e.stopPropagation();div.classList.remove('arm');};
   div.querySelector('.btn-done').onclick=e=>{e.stopPropagation();div.classList.remove('arm');div.classList.add('gone');
     markDone(kind,text,meta,div);};
-  const cb=div.querySelector('.btn-commit');
-  if(cb)cb.onclick=e=>{e.stopPropagation();div.classList.remove('arm');commitItem(text);};
-  const ub=div.querySelector('.btn-uncommit');
-  if(ub)ub.onclick=e=>{e.stopPropagation();div.classList.remove('arm');uncommitItem(text);};
-  const sb=div.querySelector('.star');
-  if(sb)sb.onclick=e=>{e.stopPropagation();toggleStar(kind,text,meta);};
-  dragEnable(div,!!opts.inTray);
   return div;
 }
 function render(){
@@ -314,20 +246,10 @@ function render(){
     h.innerHTML='<span class="tag">Highlight'+(today.date?' · plan of '+esc(today.date):'')+'</span>'+md(today.highlight);
     c.appendChild(h);
   }
-  // ---- TODAY tray (committed) ----
-  const committed=parseCommitted(S.files['today.md'].text);
-  S.committed=committed;
-  const tray=document.createElement('section');
-  tray.className='tray';tray.id='tray';
-  tray.innerHTML=`<h2>\u2b07 Today \u00b7 committed <span class="count">${committed.length}</span></h2>`;
-  if(committed.length)committed.forEach((t,i)=>tray.appendChild(itemRow(t,null,'committed',null,{inTray:true,ord:i+1})));
-  else tray.insertAdjacentHTML('beforeend','<div class="empty">Nothing committed yet \u2014 drag something here, or tap an item and press \u2191 Commit.</div>');
-  c.appendChild(tray);
-  trayDropEnable(tray);
-  // quick wins (starred first)
-  const qw=byStar(inbox.filter(t=>QW_VERB.test(bare(t))&&bare(t).length<95&&!/\u{1F6A8}|\u2190|clarify/iu.test(t))).slice(0,10);
+  // quick wins
+  const qw=inbox.filter(t=>QW_VERB.test(t)&&t.length<95&&!/🚨|←|clarify/i.test(t)).slice(0,10);
   if(qw.length){
-    const s=sec('\u26a1 5-minute counter',qw.length);
+    const s=sec('⚡ 5-minute counter',qw.length);
     qw.forEach(t=>s.appendChild(itemRow(t,'inbox','inbox')));
     c.appendChild(s);
   }
@@ -348,7 +270,7 @@ function render(){
     for(const p of projs){
       const det=document.createElement('details');det.className='proj';det.open=true;
       det.innerHTML=`<summary>${esc(p.name)}<span class="n">${p.items.length}</span></summary>`;
-      byStar(p.items).forEach(t=>det.appendChild(itemRow(t,null,'task',{project:p.name})));
+      p.items.forEach(t=>det.appendChild(itemRow(t,null,'task',{project:p.name})));
       s.appendChild(det);
     }
     c.appendChild(s);
@@ -358,13 +280,10 @@ function render(){
   if(S.emptyCaps)s.insertAdjacentHTML('beforeend',
     `<div class="empty" style="color:var(--danger)">⚠ ${S.emptyCaps} empty capture file in the repo — a Back Tap misfired (blank dictation or date); check the shortcut.</div>`);
   [...S.captures].reverse().forEach(cp=>s.appendChild(itemRow(cp.text,'📥 back tap','capture',{name:cp.name,sha:cp.sha})));
-  byStar([...inbox].reverse()).forEach((t)=>s.appendChild(itemRow(t,null,'inbox')));
+  [...inbox].reverse().forEach((t)=>s.appendChild(itemRow(t,null,'inbox')));
   if(!inbox.length&&!S.captures.length)s.insertAdjacentHTML('beforeend','<div class="empty">Inbox zero. Frame it.</div>');
   c.appendChild(s);
   applySearch();
-}
-function byStar(arr){ // starred float to the top, order otherwise preserved
-  return [...arr.filter(isStar),...arr.filter(t=>!isStar(t))];
 }
 function sec(title,count){
   const s=document.createElement('section');
@@ -414,9 +333,8 @@ async function markDone(kind,text,meta,el){
       const idx=lines.findIndex(l=>l.match(/^-\s+\[\s\]\s+/)&&l.replace(/^-\s+\[\s\]\s+/,'').trim()===text);
       if(idx<0)throw new Error('Item not found in tasks.md — refresh and retry');
       const removed=lines.splice(idx,1)[0];
-      await putFile('tasks.md',lines.join('\n'),f.sha,'Done via app: '+bare(text).slice(0,60));
-      await appendLog(`- ${stamp()} — Done (via app, ${meta.project}): ${bare(text)}`);
-      await sweepInboxTwin(text);
+      await putFile('tasks.md',lines.join('\n'),f.sha,'Done via app: '+text.slice(0,60));
+      await appendLog(`- ${stamp()} — Done (via app, ${meta.project}): ${text}`);
       toast('Done — moved to the log.',async()=>{
         const g=await getFile('tasks.md');const ls=g.text.split('\n');
         ls.splice(Math.min(idx,ls.length),0,removed);
@@ -433,174 +351,6 @@ async function markDone(kind,text,meta,el){
     loadAll();
   }catch(e){el&&el.classList.remove('gone');showErr(e);}
 }
-
-/* ---------- de-clutter: remove the inbox twin of a finished task ----------
-   An item promoted to tasks.md often survives as its original inbox line. Finishing
-   the task should clear the twin too, or inbox grows forever. Fuzzy-matched and
-   ALWAYS confirmed — never silently deleted, because a wrong match loses a capture. */
-function normy(t){return bare(t).toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();}
-function similar(a,b){
-  const A=new Set(normy(a).split(' ').filter(w=>w.length>3));
-  const B=new Set(normy(b).split(' ').filter(w=>w.length>3));
-  if(A.size<2||B.size<2)return 0;
-  let hit=0;A.forEach(w=>{if(B.has(w))hit++;});
-  return hit/Math.min(A.size,B.size);
-}
-async function sweepInboxTwin(taskText){
-  try{
-    const f=await getFile('inbox.md');
-    const lines=f.text.split('\n');
-    let best=-1,score=0;
-    lines.forEach((l,i)=>{
-      if(!/^-\s+/.test(l))return;
-      const t=l.replace(/^-\s+/,'').trim();
-      const sc=similar(taskText,t);
-      if(sc>score){score=sc;best=i;}
-    });
-    if(best<0||score<0.6)return;
-    const twin=lines[best].replace(/^-\s+/,'').trim();
-    if(!confirm('This also looks like an inbox line:\n\n'+bare(twin).slice(0,200)+'\n\nRemove it too, so the inbox stops duplicating?'))return;
-    const removed=lines.splice(best,1)[0];
-    await putFile('inbox.md',lines.join('\n'),f.sha,'De-dup via app: '+bare(twin).slice(0,50));
-    await appendLog(`- ${stamp()} — De-duped (via app): removed inbox twin "${bare(twin)}"`);
-    toast('Inbox twin removed.',async()=>{
-      const g=await getFile('inbox.md');const ls=g.text.split('\n');
-      ls.splice(Math.min(best,ls.length),0,removed);
-      await putFile('inbox.md',ls.join('\n'),g.sha,'Undo de-dup via app');
-    });
-  }catch(e){/* de-dup is best-effort; never block the done action */}
-}
-
-/* ---------- committed tray (## Committed in today.md) ---------- */
-async function writeCommitted(list,msg){
-  const f=await getFile('today.md');
-  let txt=f.text;
-  const body=list.length?list.map(t=>'- '+t).join('\n'):'(nothing committed yet)';
-  if(/##\s*Committed\s*\n/.test(txt)){
-    txt=txt.replace(/(##\s*Committed\s*\n)([\s\S]*?)(?=\n##\s|\n*$)/,'$1'+body+'\n');
-  }else{
-    // insert directly after the Highlight block so it sits near the top
-    if(/##\s*Plan\s*\n/.test(txt))txt=txt.replace(/(##\s*Plan\s*\n)/,'## Committed\n'+body+'\n\n$1');
-    else txt=txt.replace(/\n*$/,'\n')+'\n## Committed\n'+body+'\n';
-  }
-  await putFile('today.md',txt,f.sha,msg);
-}
-async function commitItem(text){
-  try{
-    const list=[...(S.committed||[])];
-    if(list.includes(text)){toast('Already committed.');return;}
-    list.push(text);
-    await writeCommitted(list,'Commit via app: '+bare(text).slice(0,60));
-    await appendLog(`- ${stamp()} — Committed to today (via app): ${bare(text)}`);
-    toast('Committed to today.');loadAll();
-  }catch(e){showErr(e);}
-}
-async function uncommitItem(text){
-  try{
-    const list=(S.committed||[]).filter(t=>t!==text);
-    await writeCommitted(list,'Uncommit via app: '+bare(text).slice(0,60));
-    toast('Removed from today.');loadAll();
-  }catch(e){showErr(e);}
-}
-async function reorderCommitted(from,to){
-  try{
-    const list=[...(S.committed||[])];
-    if(from<0||from>=list.length)return;
-    const [m]=list.splice(from,1);
-    list.splice(Math.max(0,Math.min(to,list.length)),0,m);
-    await writeCommitted(list,'Reorder today (via app)');
-    loadAll();
-  }catch(e){showErr(e);}
-}
-
-/* ---------- priority stars (leading ★ in the source line) ---------- */
-async function toggleStar(kind,text,meta){
-  try{
-    const file=kind==='task'?'tasks.md':'inbox.md';
-    const f=await getFile(file);
-    const lines=f.text.split('\n');
-    const pat=kind==='task'?/^-\s+\[\s\]\s+/:/^-\s+/;
-    const idx=lines.findIndex(l=>pat.test(l)&&l.replace(pat,'').trim()===text);
-    if(idx<0)throw new Error('Item not found in '+file+' — refresh and retry');
-    const prefix=lines[idx].match(pat)[0];
-    const now=isStar(text)?bare(text):STAR+' '+text;
-    lines[idx]=prefix+now;
-    await putFile(file,lines.join('\n'),f.sha,(isStar(text)?'Unstar':'Star')+' via app: '+bare(text).slice(0,50));
-    loadAll();
-  }catch(e){showErr(e);}
-}
-
-/* ---------- drag & drop (pointer events: one path for mouse AND touch) ---------- */
-let DRAG=null;
-function dragEnable(div,inTray){
-  const grip=div.querySelector('.grip');
-  if(!grip)return;
-  grip.addEventListener('pointerdown',ev=>{
-    ev.preventDefault();ev.stopPropagation();
-    grip.setPointerCapture(ev.pointerId);
-    const ghost=document.createElement('div');
-    ghost.className='drag-ghost';ghost.textContent=bare(div.dataset.text).slice(0,70);
-    document.body.appendChild(ghost);
-    DRAG={div,inTray,ghost,text:div.dataset.text,
-          fromIdx:inTray?[...div.parentNode.querySelectorAll('.item')].indexOf(div):-1};
-    moveGhost(ev);
-  });
-  grip.addEventListener('pointermove',ev=>{if(DRAG)moveGhost(ev);});
-  grip.addEventListener('pointerup',ev=>{if(DRAG)endDrag(ev);});
-  grip.addEventListener('pointercancel',()=>{if(DRAG)cleanDrag();});
-}
-function moveGhost(ev){
-  DRAG.ghost.style.left=(ev.clientX+12)+'px';
-  DRAG.ghost.style.top=(ev.clientY-10)+'px';
-  const tray=document.getElementById('tray');
-  if(tray)tray.classList.toggle('over',hit(tray,ev));
-}
-function hit(el,ev){const r=el.getBoundingClientRect();
-  return ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom;}
-function endDrag(ev){
-  const tray=document.getElementById('tray');
-  const overTray=tray&&hit(tray,ev);
-  const {text,inTray,fromIdx}=DRAG;
-  cleanDrag();
-  if(!overTray){ if(inTray)uncommitItem(text); return; }
-  if(inTray){
-    const rows=[...tray.querySelectorAll('.item')];
-    let to=rows.length-1;
-    for(let i=0;i<rows.length;i++){
-      const r=rows[i].getBoundingClientRect();
-      if(ev.clientY<r.top+r.height/2){to=i;break;}
-    }
-    if(to!==fromIdx)reorderCommitted(fromIdx,to);
-  }else commitItem(text);
-}
-function cleanDrag(){
-  if(!DRAG)return;
-  DRAG.ghost.remove();
-  const tray=document.getElementById('tray');if(tray)tray.classList.remove('over');
-  DRAG=null;
-}
-function trayDropEnable(tray){
-  tray.addEventListener('pointerup',()=>{if(DRAG)tray.classList.remove('over');});
-}
-
-/* ---------- last capture received ---------- */
-async function refreshCaptureAge(){
-  const el=document.getElementById('cap-age');
-  try{
-    const commits=await gh('/commits?path=captures&per_page=20');
-    const c=commits.find(x=>/back\s*tap/i.test(x.commit.message));
-    if(!c){el.textContent='';return;}
-    const when=new Date(c.commit.committer.date);
-    const hrs=(Date.now()-when)/36e5;
-    const rel=hrs<1?Math.round(hrs*60)+' min ago'
-             :hrs<24?Math.round(hrs)+'h ago'
-             :Math.round(hrs/24)+'d ago';
-    el.textContent='📥 last capture received '+rel+' ('+when.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+')';
-    el.className='cap-age'+(hrs>48?' warn':'');
-    if(hrs>48)el.textContent+=' — Back Tap may be broken, test it';
-  }catch(e){el.textContent='';}
-}
-
 document.getElementById('add-btn').onclick=addItem;
 document.getElementById('add-in').addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
 async function addItem(){
@@ -612,77 +362,6 @@ async function addItem(){
     await putFile('inbox.md',f.text.replace(/\n*$/,'\n')+'- '+v+'\n',f.sha,'Add via app: '+v.slice(0,60));
     toast('Captured.');loadAll();
   }catch(e){inp.value=v;showErr(e);}
-}
-
-/* ---------- ✨ Claude triage (on-demand only, never automatic) ----------
-   Calls the Anthropic API straight from this browser with a key kept in localStorage
-   on THIS device, same trust model as the GitHub token above. It only ever RETURNS
-   SUGGESTIONS — it does not touch a single file. Reshma acts on them or ignores them. */
-const AKEY='lifeos_anthropic_key';
-const SP_SCHEMA=`Return ONLY valid JSON, no prose, shaped exactly:
-{"urgent":[{"item":"...","why":"..."}],
- "promote":[{"item":"...","project":"...","why":"..."}],
- "clarify":[{"item":"...","question":"..."}],
- "duplicates":[{"keep":"...","drop":"...","why":"..."}]}
-Every "item" MUST be copied verbatim from the input. Omit any array you have nothing for.`;
-
-document.getElementById('sp-close').onclick=()=>{document.getElementById('sp-panel').style.display='none';};
-document.getElementById('sparkle').onclick=runTriage;
-
-async function runTriage(){
-  let key=localStorage.getItem(AKEY)||'';
-  if(!key){
-    key=(prompt('Paste your Anthropic API key (stored only on this device, like the GitHub one).\nGet one at console.anthropic.com — a triage run costs well under a cent.')||'').trim();
-    if(!key)return;
-    localStorage.setItem(AKEY,key);
-  }
-  const panel=document.getElementById('sp-panel'),body=document.getElementById('sp-body');
-  panel.style.display='block';body.innerHTML='<div class="empty">Thinking…</div>';
-  const inbox=parseInbox(S.files['inbox.md'].text);
-  const tasks=parseTasks(S.files['tasks.md'].text);
-  const projects=['Professional','Personal'].flatMap(g=>(tasks[g]||[]).map(p=>g+' / '+p.name));
-  const caps=S.captures.map(c=>c.text);
-  const payload=
-`Existing projects in tasks.md:\n${projects.join('\n')}\n\n`+
-`INBOX (raw capture, newest last):\n${inbox.map(t=>'- '+t).join('\n')}\n\n`+
-`UNMERGED BACK-TAP CAPTURES:\n${caps.length?caps.map(t=>'- '+t).join('\n'):'(none)'}\n\n`+
-`Task: triage this. Flag anything genuinely time-critical, propose inbox items that are `+
-`multi-session and belong in an existing project, name the fragments too garbled to act on `+
-`with the question you'd ask, and spot duplicates. Be conservative — few, high-confidence items.\n\n`+SP_SCHEMA;
-  try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'content-type':'application/json','x-api-key':key,
-               'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1500,
-        messages:[{role:'user',content:payload}]})});
-    if(!r.ok){
-      const t=await r.text();
-      if(r.status===401){localStorage.removeItem(AKEY);throw new Error('Key rejected (401) — cleared it, press ✨ to re-enter.');}
-      throw new Error('Anthropic '+r.status+': '+t.slice(0,200));
-    }
-    const j=await r.json();
-    const txt=(j.content||[]).map(b=>b.text||'').join('');
-    const m=txt.match(/\{[\s\S]*\}/);
-    if(!m)throw new Error('Unexpected reply: '+txt.slice(0,160));
-    renderTriage(JSON.parse(m[0]));
-  }catch(e){body.innerHTML='<div class="empty" style="color:var(--danger)">'+esc(String(e.message||e))+'</div>';}
-}
-function renderTriage(d){
-  const body=document.getElementById('sp-body');body.innerHTML='';
-  const add=(kind,label,rows,fmt)=>{
-    if(!rows||!rows.length)return;
-    rows.forEach(r=>{
-      const el=document.createElement('div');el.className='sp-item';
-      el.innerHTML=`<span class="sp-k">${label}</span><br>${fmt(r)}`;
-      body.appendChild(el);
-    });
-  };
-  add('u','⚠ time-critical',d.urgent,r=>`<b>${esc(bare(r.item))}</b><br>${esc(r.why||'')}`);
-  add('p','→ promote to a project',d.promote,r=>`<b>${esc(bare(r.item))}</b> → <b>${esc(r.project||'?')}</b><br>${esc(r.why||'')}`);
-  add('d','⧉ possible duplicate',d.duplicates,r=>`keep <b>${esc(bare(r.keep))}</b><br>drop <b>${esc(bare(r.drop))}</b><br>${esc(r.why||'')}`);
-  add('c','? needs clarifying',d.clarify,r=>`<b>${esc(bare(r.item))}</b><br>${esc(r.question||'')}`);
-  if(!body.children.length)body.innerHTML='<div class="empty">Nothing worth flagging. Inbox looks clean.</div>';
-  body.insertAdjacentHTML('beforeend','<div class="empty" style="margin-top:8px">Suggestions only — nothing was changed. Act on them yourself, or tell Claude in a session.</div>');
 }
 
 /* ---------- search ---------- */
