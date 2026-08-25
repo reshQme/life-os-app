@@ -57,8 +57,10 @@
   .item{border-bottom:1px solid var(--line)}
   .item .row{display:flex;gap:10px;align-items:flex-start;padding:9px 2px;cursor:pointer;
              -webkit-tap-highlight-color:transparent}
-  .item .box{flex:0 0 auto;width:20px;height:20px;border:2px solid var(--accent);border-radius:50%;
-             margin-top:1px;opacity:.75}
+  .item .box{flex:0 0 auto;width:22px;height:22px;border:2px solid var(--accent);border-radius:50%;
+             margin-top:1px;opacity:.75;cursor:pointer;display:flex;align-items:center;justify-content:center;
+             color:transparent;font-size:13px;font-weight:700;-webkit-tap-highlight-color:transparent}
+  .item .box:active{background:var(--accent);color:#fff;opacity:1}
   .item .txt{flex:1;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
   .item .src{flex:0 0 auto;font-size:10px;color:var(--muted);border:1px solid var(--line);
              border-radius:8px;padding:0 6px;margin-top:3px;white-space:nowrap}
@@ -279,15 +281,19 @@ function itemRow(text,src,kind,meta,opts){
   const ord=opts.ord!=null?`<span class="ord">${opts.ord}</span>`:'';
   const grip=`<span class="grip" title="Drag">\u28ff</span>`;
   const star=opts.inTray?'':`<button class="star${starred?' on':''}" title="Priority">\u2605</button>`;
-  div.innerHTML=`<div class="row">${ord}${grip}<span class="box"></span><span class="txt">${md(shown)}</span>`+
+  div.innerHTML=`<div class="row">${ord}${grip}<span class="box" title="Tap to mark done">\u2713</span><span class="txt">${md(shown)}</span>`+
     (src?`<span class="src">${esc(src)}</span>`:'')+star+`</div>`+
     `<div class="confirm"><button class="primary btn-done">\u2713 Done</button>`+
     (opts.inTray?`<button class="btn-uncommit">\u2193 Uncommit</button>`
                 :`<button class="btn-commit">\u2191 Commit</button>`)+
     `<button class="btn-no">Cancel</button></div>`;
   const row=div.querySelector('.row');
+  // Tapping the circle checks the item off in ONE tap (the toast has UNDO).
+  // Tapping the text still opens the Done/Commit/Cancel strip for the other actions.
+  div.querySelector('.box').onclick=e=>{e.stopPropagation();
+    div.classList.remove('arm');div.classList.add('gone');markDone(kind,text,meta,div);};
   row.onclick=e=>{
-    if(e.target.closest('.star')||e.target.closest('.grip'))return;
+    if(e.target.closest('.star')||e.target.closest('.grip')||e.target.closest('.box'))return;
     document.querySelectorAll('.item.arm').forEach(x=>x!==div&&x.classList.remove('arm'));
     div.classList.toggle('arm');};
   div.querySelector('.btn-no').onclick=e=>{e.stopPropagation();div.classList.remove('arm');};
@@ -429,6 +435,25 @@ async function markDone(kind,text,meta,el){
       toast('Done — capture cleared.',async()=>{
         await putFile('captures/'+meta.name,saved+'\n',null,'Undo via app');
       });
+    }else if(kind==='committed'){
+      // Done from the Today tray: remove from the tray AND from wherever the item lives
+      // (inbox or tasks), so it doesn't resurface. Previously this silently did nothing.
+      await writeCommitted((S.committed||[]).filter(t=>t!==text),'Done via app (today): '+bare(text).slice(0,60));
+      let cleared=false;
+      try{
+        const f=await getFile('inbox.md');const lines=f.text.split('\n');
+        const idx=lines.findIndex(l=>l.match(/^-\s+/)&&l.replace(/^-\s+/,'').trim()===text);
+        if(idx>=0){lines.splice(idx,1);
+          await putFile('inbox.md',lines.join('\n'),f.sha,'Done via app: '+bare(text).slice(0,60));cleared=true;}
+      }catch(e){}
+      if(!cleared)try{
+        const f=await getFile('tasks.md');const lines=f.text.split('\n');
+        const idx=lines.findIndex(l=>l.match(/^-\s+\[\s\]\s+/)&&l.replace(/^-\s+\[\s\]\s+/,'').trim()===text);
+        if(idx>=0){lines.splice(idx,1);
+          await putFile('tasks.md',lines.join('\n'),f.sha,'Done via app: '+bare(text).slice(0,60));}
+      }catch(e){}
+      await appendLog(`- ${stamp()} — Done (via app, from Today tray): ${bare(text)}`);
+      toast('Done — moved to the log.');
     }
     loadAll();
   }catch(e){el&&el.classList.remove('gone');showErr(e);}
@@ -650,10 +675,14 @@ async function runTriage(){
 `multi-session and belong in an existing project, name the fragments too garbled to act on `+
 `with the question you'd ask, and spot duplicates. Be conservative — few, high-confidence items.\n\n`+SP_SCHEMA;
   try{
+    // max_tokens was 1500 — the model's (invisible) thinking counts against it, so the
+    // visible JSON often never arrived and showed as "Unexpected reply". Now: plenty of
+    // headroom, low effort (simple task), and only text blocks are read.
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'content-type':'application/json','x-api-key':key,
                'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1500,
+      body:JSON.stringify({model:'claude-opus-5',max_tokens:8000,
+        output_config:{effort:'low'},
         messages:[{role:'user',content:payload}]})});
     if(!r.ok){
       const t=await r.text();
@@ -661,9 +690,11 @@ async function runTriage(){
       throw new Error('Anthropic '+r.status+': '+t.slice(0,200));
     }
     const j=await r.json();
-    const txt=(j.content||[]).map(b=>b.text||'').join('');
+    if(j.stop_reason==='refusal')throw new Error('Claude declined this request — try again.');
+    const txt=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text||'').join('');
+    if(j.stop_reason==='max_tokens')throw new Error('Reply was cut off — press ✨ to retry.');
     const m=txt.match(/\{[\s\S]*\}/);
-    if(!m)throw new Error('Unexpected reply: '+txt.slice(0,160));
+    if(!m)throw new Error('Unexpected reply: '+(txt.slice(0,160)||'(empty — press ✨ to retry)'));
     renderTriage(JSON.parse(m[0]));
   }catch(e){body.innerHTML='<div class="empty" style="color:var(--danger)">'+esc(String(e.message||e))+'</div>';}
 }
