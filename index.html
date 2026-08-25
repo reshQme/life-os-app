@@ -113,6 +113,8 @@
   #sp-close{float:right}
   .cap-age{font-size:11px;color:var(--muted)}
   .cap-age.warn{color:var(--danger);font-weight:700}
+  .item .age{flex:0 0 auto;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;
+             border:1px solid var(--line);border-radius:8px;padding:0 6px;margin-top:4px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -198,6 +200,9 @@ async function loadAll(){
   const [inbox,tasks,today,log]=await Promise.all([
     getFile('inbox.md'),getFile('tasks.md'),getFile('today.md'),getFile('log.md')]);
   S.files={ 'inbox.md':inbox,'tasks.md':tasks,'today.md':today,'log.md':log };
+  // item ages — same .ages.json the static builder maintains (first-seen dates).
+  // Ages are load-bearing for trust; this is what let the read-only snapshot retire.
+  try{S.ages=JSON.parse((await getFile('.ages.json')).text);}catch(e){S.ages={};}
   let caps=[];
   try{
     const list=await gh('/contents/captures');
@@ -282,7 +287,7 @@ function itemRow(text,src,kind,meta,opts){
   const grip=`<span class="grip" title="Drag">\u28ff</span>`;
   const star=opts.inTray?'':`<button class="star${starred?' on':''}" title="Priority">\u2605</button>`;
   div.innerHTML=`<div class="row">${ord}${grip}<span class="box" title="Tap to mark done">\u2713</span><span class="txt">${md(shown)}</span>`+
-    (src?`<span class="src">${esc(src)}</span>`:'')+star+`</div>`+
+    (src?`<span class="src">${esc(src)}</span>`:'')+ageChip(shown)+star+`</div>`+
     `<div class="confirm"><button class="primary btn-done">\u2713 Done</button>`+
     (opts.inTray?`<button class="btn-uncommit">\u2193 Uncommit</button>`
                 :`<button class="btn-commit">\u2191 Commit</button>`)+
@@ -371,6 +376,15 @@ function render(){
 }
 function byStar(arr){ // starred float to the top, order otherwise preserved
   return [...arr.filter(isStar),...arr.filter(t=>!isStar(t))];
+}
+function ageChip(shown){ // "13d" / "3w" chip from .ages.json (key matches the builder's keyOf)
+  const k=shown.toLowerCase().replace(/\s+/g,' ').trim();
+  const d0=S.ages&&S.ages[k];
+  if(!d0)return '';
+  const days=Math.max(0,Math.round((Date.now()-new Date(d0+'T12:00:00'))/864e5));
+  if(days<1)return '';
+  const label=days<14?days+'d':Math.round(days/7)+'w';
+  return `<span class="age" title="first captured ${esc(d0)}">${label}</span>`;
 }
 function sec(title,count){
   const s=document.createElement('section');
