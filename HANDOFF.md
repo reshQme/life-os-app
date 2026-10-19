@@ -3,7 +3,7 @@
 ## Session handoffs (newest first)
 
 ### 2026-10-19 12:00 — Life-OS App · Yours view (tap-to-done to-do list) · done  (session local_2e692580, started by local_64ed9a80)
-**Done:** `index.html` v3 — "Yours" tab (opens first) renders her cross-project to-do list from Life-OS/HANDOFF.md; tapping a card's circle rewrites that item's `Status:` line to `✓ done YYYY-MM-DD (tapped in the app)` and commits "To-do: <title> done (app)" to reshQme/life-os main; second tap restores the old text. Commit fd13552 on main, pushed — **live ✓** once the Pages build passes (see chat / check `gh api repos/reshQme/life-os-app/pages/builds/latest`). CLAUDE.md documents the convention.
+**Done:** `index.html` v3 — "Yours" tab (opens first) renders her cross-project to-do list from Life-OS/HANDOFF.md; tapping a card's circle rewrites that item's `Status:` line to `✓ done YYYY-MM-DD (tapped in the app)` and commits "To-do: <title> done (app)" to reshQme/life-os main; second tap restores the old text. Commits fd13552 + 578fc59 on main — **live ✓** (Pages build passed 2026-10-19 16:26 UTC, confirmed by fetching the site). CLAUDE.md documents the convention.
 **Decided:** no new pages — two tabs under the existing header, same card/circle language as check-off. App never touches HANDOFF.md outside the one Status text (sweep owns the section). Undo text kept in localStorage per device + in the commit body ("was: Status: …"). "maybe done"/"probably done" statuses render red.
 **Open:**
 - Reshma (hers): open https://reshqme.github.io/life-os-app/ on the phone, tap one circle, check the commit lands in life-os. Not yet tested against the real repo by anyone.
