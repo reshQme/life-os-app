@@ -115,6 +115,39 @@
   .cap-age.warn{color:var(--danger);font-weight:700}
   .item .age{flex:0 0 auto;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;
              border:1px solid var(--line);border-radius:8px;padding:0 6px;margin-top:4px;white-space:nowrap}
+  /* ---- v3: "Yours" view (her cross-project to-do list from Life-OS/HANDOFF.md) ---- */
+  .tabs{display:flex;gap:6px;margin:8px 0 4px}
+  .tabs button{flex:1;border-radius:10px;padding:7px 10px;font-weight:600;color:var(--muted);
+               display:flex;align-items:center;justify-content:center;gap:6px;-webkit-tap-highlight-color:transparent}
+  .tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .tabs button .n{background:var(--accent);color:#fff;font-size:10px;padding:0 7px;border-radius:8px;font-weight:700}
+  .tabs button .n:empty{display:none}
+  .yv-stamp{font-size:11px;color:var(--muted);margin:4px 2px 12px}
+  .quiet{margin:4px 0 10px}
+  .quiet summary{cursor:pointer;list-style:none;font-size:12px;font-weight:600;color:var(--muted);
+                 padding:5px 2px;display:flex;align-items:center;gap:6px;-webkit-user-select:none;user-select:none}
+  .quiet summary::-webkit-details-marker{display:none}
+  .quiet summary::before{content:"▸";font-size:10px}
+  .quiet[open] summary::before{content:"▾"}
+  .quiet summary .n{background:var(--line);font-size:10px;padding:0 7px;border-radius:8px;font-weight:700}
+  .quiet li{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0 0 5px;overflow-wrap:anywhere}
+  .quiet ul{margin:2px 0 4px;padding-left:18px}
+  .ycard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;
+         margin:0 0 8px;display:flex;gap:10px;align-items:flex-start}
+  .ycard .box{flex:0 0 auto;width:24px;height:24px;border:2px solid var(--accent);border-radius:50%;
+              margin-top:1px;opacity:.75;cursor:pointer;display:flex;align-items:center;justify-content:center;
+              color:transparent;font-size:13px;font-weight:700;-webkit-tap-highlight-color:transparent}
+  .ycard .box:active{background:var(--accent);color:#fff;opacity:1}
+  .ycard .body{flex:1;min-width:0}
+  .ycard .title{font-weight:600;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+  .ycard .do{font-size:13.5px;line-height:1.45;margin-top:3px;overflow-wrap:anywhere}
+  .ycard .meta{font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:5px;overflow-wrap:anywhere}
+  .ycard .meta .k{font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+  .ycard .meta.ask{color:var(--danger);font-weight:600}
+  .ycard.done{opacity:.55}
+  .ycard.done .title,.ycard.done .do{text-decoration:line-through}
+  .ycard.done .box{background:var(--accent);color:#fff;opacity:1}
+  .ycard.busy .box{opacity:.3;pointer-events:none}
 </style>
 </head>
 <body>
@@ -143,6 +176,10 @@
     <button class="ghost" id="sparkle" title="Claude triage">✨</button>
     <button class="ghost" id="btn-gear" title="Settings">⚙︎</button>
   </header>
+  <div class="tabs" id="tabs">
+    <button class="on" data-tab="yours">Yours <span class="n" id="yours-n"></span></button>
+    <button data-tab="today">Today</button>
+  </div>
   <div id="err"></div>
   <div class="cap-age" id="cap-age"></div>
   <div id="sp-panel"><button class="ghost" id="sp-close">✕</button><h3>✨ Claude triage</h3><div id="sp-body"></div></div>
@@ -155,7 +192,8 @@
     <input type="text" id="search" placeholder="Search everything…" autocomplete="off">
   </div>
 
-  <div id="content"></div>
+  <div id="yours"></div>
+  <div id="content" style="display:none"></div>
 
   <div class="footer">
     Every change is a commit to <b>life-os</b> — done items move to the log, nothing is lost.<br>
@@ -203,9 +241,10 @@ const S={files:{},captures:[],lastLoad:0};
 
 async function loadAll(){
   setLive('loading…',false);
-  const [inbox,tasks,today,log]=await Promise.all([
-    getFile('inbox.md'),getFile('tasks.md'),getFile('today.md'),getFile('log.md')]);
-  S.files={ 'inbox.md':inbox,'tasks.md':tasks,'today.md':today,'log.md':log };
+  const [inbox,tasks,today,log,handoff]=await Promise.all([
+    getFile('inbox.md'),getFile('tasks.md'),getFile('today.md'),getFile('log.md'),
+    getFile('HANDOFF.md').catch(()=>null)]); // the "Yours" list; missing file = empty view, never a dead app
+  S.files={ 'inbox.md':inbox,'tasks.md':tasks,'today.md':today,'log.md':log,'HANDOFF.md':handoff };
   // item ages — same .ages.json the static builder maintains (first-seen dates).
   // Ages are load-bearing for trust; this is what let the read-only snapshot retire.
   try{S.ages=JSON.parse((await getFile('.ages.json')).text);}catch(e){S.ages={};}
@@ -219,6 +258,8 @@ async function loadAll(){
   S.emptyCaps=caps.length-S.captures.length;
   S.lastLoad=Date.now();
   render();
+  try{renderYours();}catch(e){document.getElementById('yours').innerHTML=
+    '<div class="empty" style="color:var(--danger)">Could not read the to-do list: '+esc(String(e.message||e))+'</div>';}
   refreshCaptureAge();
   setLive('live · '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}),false);
 }
@@ -735,6 +776,183 @@ function renderTriage(d){
   if(!body.children.length)body.innerHTML='<div class="empty">Nothing worth flagging. Inbox looks clean.</div>';
   body.insertAdjacentHTML('beforeend','<div class="empty" style="margin-top:8px">Suggestions only — nothing was changed. Act on them yourself, or tell Claude in a session.</div>');
 }
+
+/* ---------- "Yours" — her cross-project to-do list (Life-OS/HANDOFF.md) ----------
+   Reads ONLY the "## Your to-do list" section (up to the next "## " heading). The sweep
+   rebuilds that section several times a day; the app changes nothing in it except one
+   item's "Status:" text when she taps the circle. Everything else in HANDOFF.md is
+   untouched — it goes back byte-for-byte. */
+/* ---- yours: parsers ---- */
+function yoursSection(md){
+  const lines=md.split('\n');
+  const start=lines.findIndex(l=>/^##\s+Your to-do list/i.test(l));
+  if(start<0)return null;
+  let end=lines.findIndex((l,i)=>i>start&&/^##\s/.test(l));
+  if(end<0)end=lines.length;
+  return {start,end,lines};
+}
+// Field keys may each start a line, or follow each other on ONE line after ". " / ") ".
+// The same regex drives reading (yFields) and writing (ySetStatus) so they can't disagree.
+const YKEY=/(^|[.)!?][ \t]+)(Do|From|Status|Then):[ \t]*/gm;
+function yFields(text){
+  const hits=[];let m;YKEY.lastIndex=0;
+  while((m=YKEY.exec(text)))hits.push({key:m[2].toLowerCase(),vs:m.index+m[0].length,ve:m.index+(m[1]?1:0)});
+  const f={};
+  hits.forEach((h,i)=>{const end=i+1<hits.length?hits[i+1].ve:text.length;
+    f[h.key]=text.slice(h.vs,end).replace(/\s+/g,' ').trim();});
+  return f;
+}
+function yIsDone(status){return /✓\s*done/i.test(status||'');}
+function parseYours(md){
+  const sec=yoursSection(md);
+  if(!sec)return null;
+  const out={stamp:'',done:[],projects:[]};
+  const hm=sec.lines[sec.start].match(/last verified\s+(.+?)(?:\s+\(|\s*$)/i);
+  if(hm)out.stamp=hm[1].trim();
+  let proj=null,mode='',cur=null;
+  const flush=()=>{ if(!cur)return;
+    cur.fields=yFields(cur.block.join('\n'));cur.done=yIsDone(cur.fields.status);
+    proj.items.push(cur);cur=null; };
+  for(let i=sec.start+1;i<sec.end;i++){
+    const line=sec.lines[i].replace(/\s+$/,'');let m;
+    if((m=line.match(/^###\s+(.*)$/))){ flush();const h=m[1].trim();
+      if(/^✓\s*Done since/i.test(h)){proj=null;mode='done';continue;}
+      proj={name:h.split(/\s+—\s+/)[0].trim(),heading:h,items:[],claude:[],waiting:[]};
+      out.projects.push(proj);mode='items';continue; }
+    if(/^\*\*Claude builds/i.test(line)){flush();mode='claude';continue;}
+    if(/^\*\*Waiting on others/i.test(line)){flush();mode='waiting';continue;}
+    if(proj&&(m=line.match(/^\*\*(\d+)\.\s+(.*?)\*\*\s*$/))){flush();mode='items';
+      cur={num:m[1],title:m[2].trim(),block:[]};continue;}
+    if(line.trim()===''){flush();continue;}
+    if((m=line.match(/^-\s+(.*\S)$/))){
+      if(mode==='done')out.done.push(m[1]);
+      else if(mode==='claude'&&proj)proj.claude.push(m[1]);
+      else if(mode==='waiting'&&proj)proj.waiting.push(m[1]);
+      else if(cur)cur.block.push(line);
+      continue; }
+    if(cur)cur.block.push(line);
+  }
+  flush();
+  return out;
+}
+// Rewrite ONE item's Status text inside the to-do section. Returns {text,prev} or null.
+function ySetStatus(md,title,newStatus){
+  const sec=yoursSection(md);
+  if(!sec)return null;
+  const L=sec.lines;
+  const esc_=title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const tre=new RegExp('^\\*\\*\\d+\\.\\s+'+esc_+'\\*\\*\\s*$');
+  let t=-1;
+  for(let i=sec.start+1;i<sec.end;i++)if(tre.test(L[i].replace(/\s+$/,''))){t=i;break;}
+  if(t<0)return null;
+  let e=t+1; // the item's block ends at a blank line, the next item, a sub-list header, or a heading
+  while(e<sec.end&&L[e].trim()!==''&&!/^\*\*(\d+\.|Claude builds|Waiting on others)/.test(L[e])&&!/^###?\s/.test(L[e]))e++;
+  const block=L.slice(t+1,e).join('\n');
+  const re=/(^|[.)!?][ \t]+)Status:[ \t]*/gm;let m,s=null;
+  while((m=re.exec(block))){s={vs:m.index+m[0].length};break;}
+  if(!s)return null;
+  // the status value ends at the next field key on the same line, or at end of line
+  const rest=block.slice(s.vs);
+  const nl=rest.indexOf('\n');const lineRest=nl<0?rest:rest.slice(0,nl);
+  // (in the compact one-line form the ". " before the next key is the separator — it stays put)
+  const nk=lineRest.search(/[.)!?][ \t]+(Do|From|Then):[ \t]*/);
+  const ve=s.vs+(nk<0?lineRest.replace(/\s+$/,'').length:nk);
+  const prev=block.slice(s.vs,ve).trim();
+  const nb=block.slice(0,s.vs)+newStatus+block.slice(ve);
+  const lines=[...L.slice(0,t+1),...nb.split('\n'),...L.slice(e)];
+  return {text:lines.join('\n'),prev};
+}
+/* ---- yours: end parsers ---- */
+
+const YPREV='lifeos_yours_prev'; // title → Status text before she tapped (for the undo tap)
+function yPrev(){try{return JSON.parse(localStorage.getItem(YPREV)||'{}');}catch(e){return{};}}
+function yPrevSet(title,val){const p=yPrev();if(val==null)delete p[title];else p[title]=val;
+  localStorage.setItem(YPREV,JSON.stringify(p));}
+
+function renderYours(){
+  const box=document.getElementById('yours');box.innerHTML='';
+  const f=S.files['HANDOFF.md'];
+  const badge=document.getElementById('yours-n');badge.textContent='';
+  if(!f){box.innerHTML='<div class="empty">No HANDOFF.md in life-os yet.</div>';return;}
+  const y=parseYours(f.text);
+  if(!y){box.innerHTML='<div class="empty">HANDOFF.md has no "Your to-do list" section yet.</div>';return;}
+  S.yours=y;
+  box.insertAdjacentHTML('beforeend',`<div class="yv-stamp">Last verified ${esc(y.stamp||'—')} · tap the circle when you've done one</div>`);
+  if(y.done.length)box.appendChild(quietList('✓ Done since the last list',y.done));
+  let open=0;
+  for(const p of y.projects){
+    const n=p.items.filter(it=>!it.done).length;open+=n;
+    const s=sec(esc(p.name),n);
+    p.items.forEach(it=>s.appendChild(yCard(it)));
+    if(!p.items.length)s.insertAdjacentHTML('beforeend','<div class="empty">Nothing for you here.</div>');
+    if(p.claude.length)s.appendChild(quietList('Claude builds — you just start the session',p.claude));
+    if(p.waiting.length)s.appendChild(quietList('Waiting on others — nothing for you',p.waiting));
+    box.appendChild(s);
+  }
+  if(!y.projects.length)box.insertAdjacentHTML('beforeend','<div class="empty">Nothing on your list. Enjoy it.</div>');
+  badge.textContent=open||'';
+  applySearch();
+}
+function quietList(title,rows){
+  const d=document.createElement('details');d.className='quiet';
+  d.innerHTML=`<summary>${esc(title)} <span class="n">${rows.length}</span></summary><ul>`+
+    rows.map(r=>`<li data-search="${esc(r.toLowerCase())}">${md(r)}</li>`).join('')+`</ul>`;
+  return d;
+}
+function yCard(it){
+  const div=document.createElement('div');
+  div.className='ycard'+(it.done?' done':'');
+  div.dataset.search=(it.title+' '+(it.fields.do||'')).toLowerCase();
+  div.dataset.title=it.title;
+  const meta=(k,v,cls)=>v?`<div class="meta ${cls||''}" data-k="${k}"><span class="k">${k}</span>${md(v)}</div>`:'';
+  div.innerHTML=`<span class="box" title="Tap when done">✓</span><div class="body">`+
+    `<div class="title">${md(it.title)}</div>`+
+    (it.fields.do?`<div class="do">${md(it.fields.do)}</div>`:'')+
+    meta('From',it.fields.from)+yStatusHtml(it.fields.status)+meta('Then',it.fields.then)+`</div>`;
+  div.querySelector('.box').onclick=e=>{e.stopPropagation();toggleYours(div,it);};
+  return div;
+}
+function yStatusHtml(st){
+  if(!st)return '';
+  const ask=/maybe done|probably done/i.test(st);
+  return `<div class="meta st${ask?' ask':''}"><span class="k">Status</span>${md(st)}</div>`;
+}
+async function toggleYours(div,it){
+  if(div.classList.contains('busy'))return;
+  div.classList.add('busy');
+  const wasDone=div.classList.contains('done');
+  const today=new Date().toISOString().slice(0,10);
+  try{
+    const f=await getFile('HANDOFF.md');
+    let newStatus,msg;
+    if(!wasDone){ newStatus='✓ done '+today+' (tapped in the app)';
+      msg='To-do: '+it.title.slice(0,80)+' done (app)'; }
+    else{ newStatus=yPrev()[it.title]||('not done (un-done in the app '+today+')');
+      msg='To-do: '+it.title.slice(0,80)+' undone (app)'; }
+    const r=ySetStatus(f.text,it.title,newStatus);
+    if(!r)throw new Error('Could not find "'+it.title+'" in HANDOFF.md — the list may have been rebuilt; refresh and retry');
+    if(!wasDone)msg+='\n\nwas: Status: '+r.prev;
+    const sha=await putFile('HANDOFF.md',r.text,f.sha,msg);
+    S.files['HANDOFF.md']={path:'HANDOFF.md',text:r.text,sha};
+    if(!wasDone)yPrevSet(it.title,r.prev);else yPrevSet(it.title,null);
+    it.fields.status=newStatus;it.done=!wasDone;
+    div.classList.toggle('done',!wasDone);
+    const old=div.querySelector('.meta.st');const nh=yStatusHtml(newStatus);
+    if(old)old.outerHTML=nh;else div.querySelector('.body').insertAdjacentHTML('beforeend',nh);
+    const badge=document.getElementById('yours-n');
+    const open=(S.yours?S.yours.projects:[]).reduce((n,p)=>n+p.items.filter(x=>!x.done).length,0);
+    badge.textContent=open||'';
+    toast(wasDone?'Back on your list.':'Done — written to HANDOFF.md. Tap again to undo.');
+  }catch(e){showErr(e);}
+  finally{div.classList.remove('busy');}
+}
+/* tabs: Yours (opening view) / Today (everything the app had before) */
+function showTab(name){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
+  document.getElementById('yours').style.display=name==='yours'?'':'none';
+  document.getElementById('content').style.display=name==='today'?'':'none';
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 
 /* ---------- search ---------- */
 document.getElementById('search').addEventListener('input',applySearch);

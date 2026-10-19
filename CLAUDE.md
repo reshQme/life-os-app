@@ -48,3 +48,20 @@ pages/builders can read them.
   clears the stored key so she can re-enter it.
 - Finishing a task fuzzy-matches its **inbox twin** and offers to remove it (always
   confirmed — a wrong match would destroy a capture).
+
+## v3: "Yours" view (2026-10-19)
+- Two tabs under the header: **Yours** (opening view) and **Today** (everything v2 had).
+- Yours reads `Life-OS/HANDOFF.md` on every load and parses ONLY the section from
+  `## Your to-do list — last verified …` to the next `## ` heading: the `### ✓ Done since
+  the last list` bullets, then per `### <Project> — N for you` heading the `**N. title**`
+  items with their `Do:` / `From:` / `Status:` / `Then:` fields (fields may each start a line
+  OR sit on one line separated by `. `), plus the `**Claude builds…**` and `**Waiting on
+  others…**` bullet lists. The nightly/5x-daily sweep owns the section's shape; the app
+  only reads it.
+- **Tap-to-done convention:** tapping the circle rewrites that one item's Status text to
+  `Status: ✓ done YYYY-MM-DD (tapped in the app)` and commits
+  `To-do: <title> done (app)` (body: `was: Status: <previous text>`). A second tap restores
+  the previous text (kept in localStorage `lifeos_yours_prev` on that device) with commit
+  `To-do: <title> undone (app)`. Any Status containing `✓ done` renders struck through;
+  `maybe done` / `probably done` renders red (a question for her). Nothing else in
+  HANDOFF.md is touched — the sweep must keep the `Status:` key spelled that way.
