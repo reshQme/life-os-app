@@ -65,3 +65,10 @@ pages/builders can read them.
   `To-do: <title> undone (app)`. Any Status containing `✓ done` renders struck through;
   `maybe done` / `probably done` renders red (a question for her). Nothing else in
   HANDOFF.md is touched — the sweep must keep the `Status:` key spelled that way.
+- The view explicitly says that open items remain until she taps or tells Claude they are
+  done. `maybe done`, `probably done`, `unknown`, and `unverified` statuses also render an
+  “Is this done?” prompt. Cards and their Do / From / Status / Then fields have generous
+  vertical separation for phone and desktop readability.
+- This live view is the actionable panel for sweep results. A static Markdown or HTML
+  artifact must never be presented as supporting write-back; the sweep should open the
+  deployed app in Claude's Browser panel after every run and fall back to its clickable URL.

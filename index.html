@@ -122,7 +122,8 @@
   .tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
   .tabs button .n{background:var(--accent);color:#fff;font-size:10px;padding:0 7px;border-radius:8px;font-weight:700}
   .tabs button .n:empty{display:none}
-  .yv-stamp{font-size:11px;color:var(--muted);margin:4px 2px 12px}
+  .yv-stamp{font-size:11.5px;color:var(--muted);line-height:1.45;margin:6px 2px 16px;
+            padding:9px 11px;background:var(--card);border:1px solid var(--line);border-radius:10px}
   .quiet{margin:4px 0 10px}
   .quiet summary{cursor:pointer;list-style:none;font-size:12px;font-weight:600;color:var(--muted);
                  padding:5px 2px;display:flex;align-items:center;gap:6px;-webkit-user-select:none;user-select:none}
@@ -132,18 +133,22 @@
   .quiet summary .n{background:var(--line);font-size:10px;padding:0 7px;border-radius:8px;font-weight:700}
   .quiet li{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0 0 5px;overflow-wrap:anywhere}
   .quiet ul{margin:2px 0 4px;padding-left:18px}
-  .ycard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;
-         margin:0 0 8px;display:flex;gap:10px;align-items:flex-start}
+  .ycard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px;
+         margin:0 0 14px;display:flex;gap:12px;align-items:flex-start;
+         box-shadow:0 1px 0 rgba(0,0,0,.03)}
   .ycard .box{flex:0 0 auto;width:24px;height:24px;border:2px solid var(--accent);border-radius:50%;
               margin-top:1px;opacity:.75;cursor:pointer;display:flex;align-items:center;justify-content:center;
               color:transparent;font-size:13px;font-weight:700;-webkit-tap-highlight-color:transparent}
   .ycard .box:active{background:var(--accent);color:#fff;opacity:1}
   .ycard .body{flex:1;min-width:0}
-  .ycard .title{font-weight:600;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
-  .ycard .do{font-size:13.5px;line-height:1.45;margin-top:3px;overflow-wrap:anywhere}
-  .ycard .meta{font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:5px;overflow-wrap:anywhere}
+  .ycard .title{font-weight:650;font-size:14.5px;line-height:1.4;overflow-wrap:anywhere}
+  .ycard .do{font-size:13.5px;line-height:1.55;margin-top:8px;overflow-wrap:anywhere}
+  .ycard .meta{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:9px;
+               padding-top:9px;border-top:1px solid var(--line);overflow-wrap:anywhere}
   .ycard .meta .k{font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
   .ycard .meta.ask{color:var(--danger);font-weight:600}
+  .ycard .ask-prompt{display:block;margin-top:4px;font-size:11px;line-height:1.4;
+                     color:var(--danger);font-weight:700}
   .ycard.done{opacity:.55}
   .ycard.done .title,.ycard.done .do{text-decoration:line-through}
   .ycard.done .box{background:var(--accent);color:#fff;opacity:1}
@@ -877,7 +882,7 @@ function renderYours(){
   const y=parseYours(f.text);
   if(!y){box.innerHTML='<div class="empty">HANDOFF.md has no "Your to-do list" section yet.</div>';return;}
   S.yours=y;
-  box.insertAdjacentHTML('beforeend',`<div class="yv-stamp">Last verified ${esc(y.stamp||'—')} · tap the circle when you've done one</div>`);
+  box.insertAdjacentHTML('beforeend',`<div class="yv-stamp"><b>Last refreshed from the sweep:</b> ${esc(y.stamp||'—')}<br>Open items stay here until you tap the circle or tell Claude they are done.</div>`);
   if(y.done.length)box.appendChild(quietList('✓ Done since the last list',y.done));
   let open=0;
   for(const p of y.projects){
@@ -914,8 +919,10 @@ function yCard(it){
 }
 function yStatusHtml(st){
   if(!st)return '';
-  const ask=/maybe done|probably done/i.test(st);
-  return `<div class="meta st${ask?' ask':''}"><span class="k">Status</span>${md(st)}</div>`;
+  const ask=/maybe done|probably done|unknown|unverified/i.test(st);
+  const alreadyAsks=/is this done/i.test(st);
+  return `<div class="meta st${ask?' ask':''}"><span class="k">Status</span>${md(st)}`+
+    (ask&&!alreadyAsks?`<span class="ask-prompt">Is this done? Tap the circle to confirm, or tell Claude.</span>`:'')+`</div>`;
 }
 async function toggleYours(div,it){
   if(div.classList.contains('busy'))return;
