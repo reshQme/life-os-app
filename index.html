@@ -142,7 +142,11 @@
   .ycard .box:active{background:var(--accent);color:#fff;opacity:1}
   .ycard .body{flex:1;min-width:0}
   .ycard .title{font-weight:650;font-size:14.5px;line-height:1.4;overflow-wrap:anywhere}
-  .ycard .do{font-size:13.5px;line-height:1.55;margin-top:8px;overflow-wrap:anywhere}
+  .ycard .do{font-size:13.5px;line-height:1.55;margin-top:9px;padding:9px 10px;
+             border-left:3px solid var(--danger);border-radius:6px;background:var(--hl);
+             overflow-wrap:anywhere}
+  .ycard .do .k{display:block;color:var(--danger);font-size:9.5px;font-weight:800;
+                text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
   .ycard .meta{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:9px;
                padding-top:9px;border-top:1px solid var(--line);overflow-wrap:anywhere}
   .ycard .meta .k{font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
@@ -323,8 +327,8 @@ function parseToday(md){
 const QW_VERB=/^(buy|order|message|text|call|email|contact|reply|refill|use|check|decide|ship|book|pay|send)\b/i;
 
 /* ---------- rendering ---------- */
-function md(s){ // minimal inline markdown: bold + strip links
-  return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>');
+function md(s){ // minimal inline markdown: bold, code, and intentional line breaks
+  return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>').replace(/\n/g,'<br>');
 }
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function itemRow(text,src,kind,meta,opts){
@@ -804,7 +808,7 @@ function yFields(text){
   while((m=YKEY.exec(text)))hits.push({key:m[2].toLowerCase(),vs:m.index+m[0].length,ve:m.index+(m[1]?1:0)});
   const f={};
   hits.forEach((h,i)=>{const end=i+1<hits.length?hits[i+1].ve:text.length;
-    f[h.key]=text.slice(h.vs,end).replace(/\s+/g,' ').trim();});
+    f[h.key]=text.slice(h.vs,end).replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();});
   return f;
 }
 function yIsDone(status){return /✓\s*done/i.test(status||'');}
@@ -828,7 +832,7 @@ function parseYours(md){
     if(/^\*\*Waiting on others/i.test(line)){flush();mode='waiting';continue;}
     if(proj&&(m=line.match(/^\*\*(\d+)\.\s+(.*?)\*\*\s*$/))){flush();mode='items';
       cur={num:m[1],title:m[2].trim(),block:[]};continue;}
-    if(line.trim()===''){flush();continue;}
+    if(line.trim()===''){if(cur)cur.block.push('');continue;}
     if((m=line.match(/^-\s+(.*\S)$/))){
       if(mode==='done')out.done.push(m[1]);
       else if(mode==='claude'&&proj)proj.claude.push(m[1]);
@@ -850,8 +854,8 @@ function ySetStatus(md,title,newStatus){
   let t=-1;
   for(let i=sec.start+1;i<sec.end;i++)if(tre.test(L[i].replace(/\s+$/,''))){t=i;break;}
   if(t<0)return null;
-  let e=t+1; // the item's block ends at a blank line, the next item, a sub-list header, or a heading
-  while(e<sec.end&&L[e].trim()!==''&&!/^\*\*(\d+\.|Claude builds|Waiting on others)/.test(L[e])&&!/^###?\s/.test(L[e]))e++;
+  let e=t+1; // blank lines may separate fields; structural headings end the item
+  while(e<sec.end&&!/^\*\*(\d+\.|Claude builds|Waiting on others)/.test(L[e])&&!/^###?\s/.test(L[e]))e++;
   const block=L.slice(t+1,e).join('\n');
   const re=/(^|[.)!?][ \t]+)Status:[ \t]*/gm;let m,s=null;
   while((m=re.exec(block))){s={vs:m.index+m[0].length};break;}
@@ -912,7 +916,7 @@ function yCard(it){
   const meta=(k,v,cls)=>v?`<div class="meta ${cls||''}" data-k="${k}"><span class="k">${k}</span>${md(v)}</div>`:'';
   div.innerHTML=`<span class="box" title="Tap when done">✓</span><div class="body">`+
     `<div class="title">${md(it.title)}</div>`+
-    (it.fields.do?`<div class="do">${md(it.fields.do)}</div>`:'')+
+    (it.fields.do?`<div class="do"><span class="k">Your action</span>${md(it.fields.do)}</div>`:'')+
     meta('From',it.fields.from)+yStatusHtml(it.fields.status)+meta('Then',it.fields.then)+`</div>`;
   div.querySelector('.box').onclick=e=>{e.stopPropagation();toggleYours(div,it);};
   return div;
