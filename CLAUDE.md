@@ -72,3 +72,23 @@ pages/builders can read them.
 - This live view is the actionable panel for sweep results. A static Markdown or HTML
   artifact must never be presented as supporting write-back; the sweep should open the
   deployed app in Claude's Browser panel after every run and fall back to its clickable URL.
+
+## v4: summary on top of Yours (her pick "E", 2026-11-16)
+- Above the full project cards (which all stay, see-everything rule): **Start here** (the
+  newest `- **Start here:**` line from the first "Morning project progress" block), four
+  **batches** — Send · Decide · Focus · Admin — each with `▶ Work these`, and a strip-style
+  **rail**: Is this done? · Snoozed · Claude builds · Waiting on others · Finished.
+- **Batches are computed, never stored:** `yKind()` reads the item title (project prefix
+  like "Book:" stripped), then the Do text as fallback. First match wins: send → decide →
+  focus → admin. Words were picked by Claude 2026-11-16 for her review; edit the regexes there.
+- **Work mode** (her "D"): one card at a time with Done / Snooze / Skip / Stop and
+  "N cleared today · yesterday M", counted from `✓ done <date> (tapped in the app)` in the
+  file itself, so phone and Mac agree.
+- **Snooze convention:** `Status: snoozed until YYYY-MM-DD (tapped in the app)` (Tomorrow /
+  Next Monday / In a week). Past date = open again; nothing has to wake it. `deferred by
+  you…` statuses show as "parked, no date". Wake now restores the previous Status kept in
+  `lifeos_yours_prev` on that device. The sweep must leave `snoozed until` lines alone
+  (rule added to session-handoff-sweep SKILL.md the same day).
+- **Parser:** any whole-line bold title (`**Title**`, numbered or not) starts an item —
+  unnumbered ones used to be swallowed into the card above. Done/snooze/wake share one
+  write path, `yWrite()`; dates are local, not UTC.

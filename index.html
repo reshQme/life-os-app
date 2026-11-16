@@ -157,6 +157,37 @@
   .ycard.done .title,.ycard.done .do{text-decoration:line-through}
   .ycard.done .box{background:var(--accent);color:#fff;opacity:1}
   .ycard.busy .box{opacity:.3;pointer-events:none}
+  /* ---- v4: summary on top of Yours (her pick "E", 2026-11-16): batches + rail + work mode ---- */
+  .ysum{margin:0 0 18px}
+  .ystart{border:2px solid var(--accent);border-radius:12px;padding:10px 12px;font-size:13.5px;
+          line-height:1.45;margin:0 0 12px;overflow-wrap:anywhere}
+  .ystart .k,#ywork .k{display:block;font-size:10px;font-weight:800;text-transform:uppercase;
+          letter-spacing:.08em;color:var(--accent);margin-bottom:3px}
+  .ybat{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+  .ycol{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px;
+        display:flex;flex-direction:column;min-width:0}
+  .ycol h4{margin:0 0 7px;font-size:12.5px;display:flex;gap:6px;align-items:center}
+  .ycol h4 .n{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600}
+  .ycol .yk{font-size:12px;line-height:1.35;padding:6px 7px;border:1px solid var(--line);border-radius:7px;
+            margin-bottom:5px;overflow-wrap:anywhere;cursor:pointer}
+  .ycol .yk .pj{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-bottom:1px}
+  .ycol .more{font-size:11px;color:var(--muted);margin:2px 0 6px}
+  .ycol button{margin-top:auto;font-size:12px;padding:5px 8px}
+  .yrail{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .yrail button{font-size:12px;padding:5px 11px;border-radius:999px}
+  .yrail button.ask{color:var(--danger);border-color:var(--danger)}
+  #ywork{border:2px solid var(--accent);border-radius:14px;padding:14px;margin:0 0 16px;background:var(--card)}
+  #ywork.busy{opacity:.5;pointer-events:none}
+  #ywork .wm{display:flex;justify-content:space-between;flex-wrap:wrap;font-size:11.5px;color:var(--muted);gap:4px 10px}
+  #ywork .wt{font-size:16px;font-weight:650;line-height:1.4;margin:8px 0;overflow-wrap:anywhere}
+  #ywork .wd{font-size:13.5px;line-height:1.55;padding:9px 10px;border-left:3px solid var(--danger);
+             background:var(--hl);margin-bottom:12px;overflow-wrap:anywhere}
+  #ywork .wb,#ywork .snz{display:flex;flex-wrap:wrap;gap:6px}
+  #ywork .snz{display:none;margin-top:8px}
+  #ywork .snz.on{display:flex}
+  .ycard.snoozed{opacity:.6;border-style:dashed}
+  .ycard .back{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);margin-top:8px}
+  .ycard .back button{font-size:11px;padding:2px 8px}
 </style>
 </head>
 <body>
@@ -815,7 +846,8 @@ function yIsDone(status){return /✓\s*done/i.test(status||'');}
 function parseYours(md){
   const sec=yoursSection(md);
   if(!sec)return null;
-  const out={stamp:'',done:[],projects:[]};
+  const out={stamp:'',done:[],projects:[],start:'',morning:[]};
+  let morningSeen=false;
   const hm=sec.lines[sec.start].match(/last verified\s+(.+?)(?:\s+\(|\s*$)/i);
   if(hm)out.stamp=hm[1].trim();
   let proj=null,mode='',cur=null;
@@ -826,15 +858,21 @@ function parseYours(md){
     const line=sec.lines[i].replace(/\s+$/,'');let m;
     if((m=line.match(/^###\s+(.*)$/))){ flush();const h=m[1].trim();
       if(/^✓\s*Done since/i.test(h)){proj=null;mode='done';continue;}
+      // "Morning project progress — date" blocks are news, not a project: keep the newest one
+      if(/^Morning project progress/i.test(h)){proj=null;mode=morningSeen?'skip':'morning';morningSeen=true;continue;}
       proj={name:h.split(/\s+—\s+/)[0].trim(),heading:h,items:[],claude:[],waiting:[]};
       out.projects.push(proj);mode='items';continue; }
     if(/^\*\*Claude builds/i.test(line)){flush();mode='claude';continue;}
     if(/^\*\*Waiting on others/i.test(line)){flush();mode='waiting';continue;}
-    if(proj&&(m=line.match(/^\*\*(\d+)\.\s+(.*?)\*\*\s*$/))){flush();mode='items';
-      cur={num:m[1],title:m[2].trim(),block:[]};continue;}
+    // A whole-line bold title starts an item, numbered or not. (Unnumbered ones used to be
+    // swallowed into the card above them — found 2026-11-09 with the G Capital request.)
+    if(proj&&(m=line.match(/^\*\*(?:(\d+)\.\s+)?(.+?)\*\*\s*$/))){flush();mode='items';
+      cur={num:m[1]||'',title:m[2].trim(),project:proj.name,block:[]};continue;}
     if(line.trim()===''){if(cur)cur.block.push('');continue;}
     if((m=line.match(/^-\s+(.*\S)$/))){
-      if(mode==='done')out.done.push(m[1]);
+      if(mode==='morning'){const s=m[1].match(/^\*\*Start here:\*\*\s*(.*)$/i);
+        if(s)out.start=s[1];else out.morning.push(m[1]);}
+      else if(mode==='done')out.done.push(m[1]);
       else if(mode==='claude'&&proj)proj.claude.push(m[1]);
       else if(mode==='waiting'&&proj)proj.waiting.push(m[1]);
       else if(cur)cur.block.push(line);
@@ -850,12 +888,13 @@ function ySetStatus(md,title,newStatus){
   if(!sec)return null;
   const L=sec.lines;
   const esc_=title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const tre=new RegExp('^\\*\\*\\d+\\.\\s+'+esc_+'\\*\\*\\s*$');
+  const tre=new RegExp('^\\*\\*(?:\\d+\\.\\s+)?'+esc_+'\\*\\*\\s*$');
   let t=-1;
   for(let i=sec.start+1;i<sec.end;i++)if(tre.test(L[i].replace(/\s+$/,''))){t=i;break;}
   if(t<0)return null;
-  let e=t+1; // blank lines may separate fields; structural headings end the item
-  while(e<sec.end&&!/^\*\*(\d+\.|Claude builds|Waiting on others)/.test(L[e])&&!/^###?\s/.test(L[e]))e++;
+  let e=t+1; // blank lines may separate fields; the next title or a heading ends the item
+  while(e<sec.end&&!/^\*\*(\d+\.|Claude builds|Waiting on others)/.test(L[e])
+        &&!/^\*\*.+\*\*\s*$/.test(L[e])&&!/^###?\s/.test(L[e]))e++;
   const block=L.slice(t+1,e).join('\n');
   const re=/(^|[.)!?][ \t]+)Status:[ \t]*/gm;let m,s=null;
   while((m=re.exec(block))){s={vs:m.index+m[0].length};break;}
@@ -878,6 +917,53 @@ function yPrev(){try{return JSON.parse(localStorage.getItem(YPREV)||'{}');}catch
 function yPrevSet(title,val){const p=yPrev();if(val==null)delete p[title];else p[title]=val;
   localStorage.setItem(YPREV,JSON.stringify(p));}
 
+/* ---- yours v4 (her pick "E", 2026-11-16): batches on top, strip-style rail, one-at-a-time
+   work mode, snooze. Snooze lives in the Status text exactly like done does, so the sweep
+   and every device see it:  `Status: snoozed until YYYY-MM-DD (tapped in the app)`.
+   A past date simply counts as open again; the sweep never needs to wake anything. ---- */
+function localISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function todayISO(){return localISO(new Date());}
+function ySnooze(status){ // → 'YYYY-MM-DD' while snoozed, 'later' for an undated deferral, else null
+  const s=status||'';const m=s.match(/snoozed until (\d{4}-\d{2}-\d{2})/i);
+  if(m)return m[1]>todayISO()?m[1]:null;
+  if(/^deferred by you/i.test(s))return 'later';
+  return null;
+}
+function yAsk(status){return /maybe done|probably done|unknown|unverified/i.test(status||'');}
+function yWhen(iso){if(iso==='later')return 'parked, no date';
+  const d=new Date(iso+'T12:00');return 'back '+d.toLocaleDateString(undefined,{weekday:'short',month:'numeric',day:'numeric'});}
+
+// Which batch an item belongs to. Read from the item's title + "Do:" text — nothing new is
+// written into HANDOFF.md, so the sweep's format stays exactly as it is.
+const YBATCH=[{k:'send',label:'Send',icon:'💬'},{k:'decide',label:'Decide',icon:'🤔'},
+              {k:'focus',label:'Focus',icon:'✍️'},{k:'admin',label:'Admin',icon:'✅'}];
+// Title first (it names the action); the "Do:" text is only a fallback. First match wins.
+function yKind(it){
+  // drop a project prefix like "Book:" / "Sky High:" so the verb after it counts
+  const t=it.title.toLowerCase()
+    .replace(/^(book|calm breeze|sky high|greystone aim|aim|life-os|status strip|author[^:]*):\s*/,'');
+  const d=(it.fields.do||'').toLowerCase().replace(/[*_]/g,'').trim();
+  // Send: the title starts with a message verb ("Ask Mina…", "Later: ask Amrit…")
+  if(/^(later:\s*)?(send|ask|tell|reply|text|message|email|remind|nudge)\b/.test(t))return 'send';
+  // Decide: a choice, an OK, a merge, or an either/or question
+  if(/\b(decide|choose|pick|settle|approve|ok|okay|say (merge|go|yes)|merge|calls?|exit plan|waiting on reshma)\b/.test(t)
+     ||/\b(or|keep)\b.*\?\s*$/.test(t))return 'decide';
+  // Focus: real thinking time — writing, revising, reading through, trying something new
+  if(/\b(revis\w*|rewrite|draft|chapter|go through|read through)\b/.test(t)||/^try\b/.test(t))return 'focus';
+  // Fallback on the action text, for titles that don't name a verb
+  if(/^(send|paste|text|ask|tell|reply)\b/.test(d))return 'send';
+  return 'admin';
+}
+
+function yOpenItems(y){return y.projects.flatMap(p=>p.items.filter(it=>!it.done));}
+function yClearedCounts(){ // from the file itself, so it is the same on phone and Mac
+  const f=S.files['HANDOFF.md'];const c={today:0,yesterday:0};if(!f)return c;
+  const y=new Date();y.setDate(y.getDate()-1);const t=todayISO(),yd=localISO(y);
+  for(const m of f.text.matchAll(/✓ done (\d{4}-\d{2}-\d{2}) \(tapped in the app/g)){
+    if(m[1]===t)c.today++;else if(m[1]===yd)c.yesterday++;}
+  return c;
+}
+
 function renderYours(){
   const box=document.getElementById('yours');box.innerHTML='';
   const f=S.files['HANDOFF.md'];
@@ -886,11 +972,12 @@ function renderYours(){
   const y=parseYours(f.text);
   if(!y){box.innerHTML='<div class="empty">HANDOFF.md has no "Your to-do list" section yet.</div>';return;}
   S.yours=y;
-  box.insertAdjacentHTML('beforeend',`<div class="yv-stamp"><b>Last refreshed from the sweep:</b> ${esc(y.stamp||'—')}<br>Open items stay here until you tap the circle or tell Claude they are done.</div>`);
+  box.appendChild(ySummary(y));
+  box.insertAdjacentHTML('beforeend',`<div class="yv-stamp"><b>Last refreshed from the sweep:</b> ${esc(y.stamp||'—')}<br>Open items stay here until you tap the circle or tell Claude they are done. Everything is listed below, project by project.</div>`);
+  if(y.morning.length)box.appendChild(quietList('Morning project progress',y.morning));
   if(y.done.length)box.appendChild(quietList('✓ Done since the last list',y.done));
-  let open=0;
   for(const p of y.projects){
-    const n=p.items.filter(it=>!it.done).length;open+=n;
+    const n=p.items.filter(it=>!it.done&&!ySnooze(it.fields.status)).length;
     const s=sec(esc(p.name),n);
     p.items.forEach(it=>s.appendChild(yCard(it)));
     if(!p.items.length)s.insertAdjacentHTML('beforeend','<div class="empty">Nothing for you here.</div>');
@@ -899,9 +986,101 @@ function renderYours(){
     box.appendChild(s);
   }
   if(!y.projects.length)box.insertAdjacentHTML('beforeend','<div class="empty">Nothing on your list. Enjoy it.</div>');
-  badge.textContent=open||'';
+  yBadge();
+  yWorkDraw();
   applySearch();
 }
+function yBadge(){const n=S.yours?yOpenItems(S.yours).filter(it=>!ySnooze(it.fields.status)).length:0;
+  document.getElementById('yours-n').textContent=n||'';}
+
+function ySummary(y){
+  const all=yOpenItems(y);
+  const snz=all.filter(it=>ySnooze(it.fields.status));
+  const ask=all.filter(it=>!snz.includes(it)&&yAsk(it.fields.status));
+  const act=all.filter(it=>!snz.includes(it)&&!ask.includes(it));
+  const d=document.createElement('div');d.className='ysum';
+  if(y.start)d.insertAdjacentHTML('beforeend',`<div class="ystart"><span class="k">→ Start here</span>${md(y.start)}</div>`);
+  const grid=document.createElement('div');grid.className='ybat';
+  for(const b of YBATCH){
+    const items=act.filter(it=>yKind(it)===b.k);
+    const col=document.createElement('div');col.className='ycol';
+    col.innerHTML=`<h4>${b.icon} ${b.label}<span class="n">${items.length}</span></h4>`+
+      items.slice(0,3).map((it,i)=>`<div class="yk" data-i="${i}"><span class="pj">${esc(it.project||'')}</span>${md(it.title)}</div>`).join('')+
+      (items.length>3?`<div class="more">+${items.length-3} more</div>`:'')+
+      (items.length?`<button class="ghost">▶ Work these</button>`:`<div class="more">Nothing here</div>`);
+    col.querySelectorAll('.yk').forEach(el=>el.onclick=()=>yWorkStart(b.label,items,+el.dataset.i));
+    const btn=col.querySelector('button');if(btn)btn.onclick=()=>yWorkStart(b.label,items,0);
+    grid.appendChild(col);
+  }
+  d.appendChild(grid);
+  const rail=document.createElement('div');rail.className='yrail';
+  const rb=(txt,cls,fn)=>{const b=document.createElement('button');b.className='ghost '+(cls||'');
+    b.textContent=txt;b.onclick=fn;rail.appendChild(b);};
+  const nC=y.projects.reduce((n,p)=>n+p.claude.length,0),nW=y.projects.reduce((n,p)=>n+p.waiting.length,0);
+  if(ask.length)rb('Is this done? '+ask.length,'ask',()=>yWorkStart('Is this done?',ask,0));
+  if(snz.length)rb('💤 Snoozed '+snz.length,'',()=>yWorkStart('Snoozed',snz,0));
+  if(nC)rb('Claude builds '+nC,'',()=>yJump('Claude builds'));
+  if(nW)rb('Waiting on others '+nW,'',()=>yJump('Waiting on others'));
+  if(y.done.length)rb('✓ Finished '+y.done.length,'',()=>yJump('✓ Done since'));
+  d.appendChild(rail);
+  return d;
+}
+function yJump(prefix){
+  const d=[...document.querySelectorAll('#yours details.quiet')].find(x=>x.querySelector('summary').textContent.startsWith(prefix));
+  if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'});}
+}
+
+/* work mode: one card at a time (her "D", used to work through a batch) */
+let W=null; // {label, queue:[titles], i}
+function yFind(title){for(const p of (S.yours?S.yours.projects:[]))for(const it of p.items)if(it.title===title)return it;return null;}
+function yWorkStart(label,items,i){
+  W={label,queue:items.map(it=>it.title),i:i||0};yWorkDraw();
+  document.getElementById('ywork').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function yWorkDraw(){
+  let el=document.getElementById('ywork');
+  if(!W){if(el)el.remove();return;}
+  if(!el){el=document.createElement('div');el.id='ywork';const box=document.getElementById('yours');box.insertBefore(el,box.firstChild);}
+  while(W.i<W.queue.length){const it=yFind(W.queue[W.i]);if(it&&!it.done)break;W.i++;} // done elsewhere = skip
+  const c=yClearedCounts();
+  const head=(left)=>`<div class="wm"><span>${left}</span><span>${c.today} cleared today · yesterday ${c.yesterday}</span></div>`;
+  if(W.i>=W.queue.length){
+    el.innerHTML=head(esc(W.label))+`<div class="wt">That's the batch.</div><div class="wb"><button class="ghost" data-a="stop">Close</button></div>`;
+  }else{
+    const it=yFind(W.queue[W.i]);const snzd=ySnooze(it.fields.status);
+    el.innerHTML=head(`${esc(W.label)} · ${W.i+1} of ${W.queue.length} · ${esc(it.project||'')}`)+
+      `<div class="wt">${md(it.title)}</div>`+(it.fields.do?`<div class="wd">${md(it.fields.do)}</div>`:'')+
+      `<div class="wb"><button class="primary" data-a="done">✓ Done</button>`+
+      (snzd?`<button class="ghost" data-a="wake">Wake it now</button>`:`<button class="ghost" data-a="snz">💤 Snooze</button>`)+
+      `<button class="ghost" data-a="skip">Skip</button><button class="ghost" data-a="stop">Stop</button></div>`+
+      `<div class="snz"><button class="ghost" data-s="1">Tomorrow</button><button class="ghost" data-s="mon">Next Monday</button><button class="ghost" data-s="7">In a week</button></div>`;
+  }
+  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>yWorkAct(b.dataset.a,el));
+  el.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>yWorkSnooze(b.dataset.s,el));
+}
+async function yWorkAct(a,el){
+  if(a==='stop'){W=null;yWorkDraw();return;}
+  if(a==='skip'){W.i++;yWorkDraw();return;}
+  if(a==='snz'){el.querySelector('.snz').classList.toggle('on');return;}
+  const it=yFind(W.queue[W.i]);if(!it)return;
+  el.classList.add('busy');
+  try{
+    if(a==='done'){await yWrite(it,'✓ done '+todayISO()+' (tapped in the app)','done',true);toast('Done — written to HANDOFF.md.');}
+    if(a==='wake'){await yWrite(it,yPrev()[it.title]||('not done (woken in the app '+todayISO()+')'),'woken',false);toast('Back on your list.');}
+    W.i++;renderYours();
+  }catch(e){showErr(e);el.classList.remove('busy');}
+}
+async function yWorkSnooze(s,el){
+  const it=yFind(W.queue[W.i]);if(!it)return;
+  const d=new Date();
+  if(s==='mon')d.setDate(d.getDate()+((8-d.getDay())%7||7));else d.setDate(d.getDate()+(+s));
+  const iso=localISO(d);
+  el.classList.add('busy');
+  try{await yWrite(it,'snoozed until '+iso+' (tapped in the app)','snoozed until '+iso,true);
+    toast('Snoozed — '+yWhen(iso)+'.');W.i++;renderYours();}
+  catch(e){showErr(e);el.classList.remove('busy');}
+}
+
 function quietList(title,rows){
   const d=document.createElement('details');d.className='quiet';
   d.innerHTML=`<summary>${esc(title)} <span class="n">${rows.length}</span></summary><ul>`+
@@ -910,52 +1089,54 @@ function quietList(title,rows){
 }
 function yCard(it){
   const div=document.createElement('div');
-  div.className='ycard'+(it.done?' done':'');
+  const snz=!it.done&&ySnooze(it.fields.status);
+  div.className='ycard'+(it.done?' done':'')+(snz?' snoozed':'');
   div.dataset.search=(it.title+' '+(it.fields.do||'')).toLowerCase();
   div.dataset.title=it.title;
   const meta=(k,v,cls)=>v?`<div class="meta ${cls||''}" data-k="${k}"><span class="k">${k}</span>${md(v)}</div>`:'';
   div.innerHTML=`<span class="box" title="Tap when done">✓</span><div class="body">`+
     `<div class="title">${md(it.title)}</div>`+
+    (snz?`<div class="back">💤 ${esc(yWhen(snz))}${/snoozed until/i.test(it.fields.status)?' <button class="ghost">Wake now</button>':''}</div>`:'')+
     (it.fields.do?`<div class="do"><span class="k">Your action</span>${md(it.fields.do)}</div>`:'')+
     meta('From',it.fields.from)+yStatusHtml(it.fields.status)+meta('Then',it.fields.then)+`</div>`;
   div.querySelector('.box').onclick=e=>{e.stopPropagation();toggleYours(div,it);};
+  const wake=div.querySelector('.back button');
+  if(wake)wake.onclick=async e=>{e.stopPropagation();div.classList.add('busy');
+    try{await yWrite(it,yPrev()[it.title]||('not done (woken in the app '+todayISO()+')'),'woken',false);
+      toast('Back on your list.');renderYours();}catch(err){showErr(err);div.classList.remove('busy');}};
   return div;
 }
 function yStatusHtml(st){
   if(!st)return '';
-  const ask=/maybe done|probably done|unknown|unverified/i.test(st);
+  const ask=yAsk(st);
   const alreadyAsks=/is this done/i.test(st);
   return `<div class="meta st${ask?' ask':''}"><span class="k">Status</span>${md(st)}`+
     (ask&&!alreadyAsks?`<span class="ask-prompt">Is this done? Tap the circle to confirm, or tell Claude.</span>`:'')+`</div>`;
+}
+// One write path for done / undone / snooze / wake: rewrite that item's Status, commit, refresh.
+// keepPrev stores the old Status on this device so the next tap (undo / wake) can put it back.
+async function yWrite(it,newStatus,verb,keepPrev){
+  const f=await getFile('HANDOFF.md');
+  const r=ySetStatus(f.text,it.title,newStatus);
+  if(!r)throw new Error('Could not find "'+it.title+'" in HANDOFF.md — the list may have been rebuilt; refresh and retry');
+  let msg='To-do: '+it.title.slice(0,80)+' '+verb+' (app)';
+  if(keepPrev)msg+='\n\nwas: Status: '+r.prev;
+  const sha=await putFile('HANDOFF.md',r.text,f.sha,msg);
+  S.files['HANDOFF.md']={path:'HANDOFF.md',text:r.text,sha};
+  yPrevSet(it.title,keepPrev?r.prev:null);
+  it.fields.status=newStatus;it.done=yIsDone(newStatus);
+  return r;
 }
 async function toggleYours(div,it){
   if(div.classList.contains('busy'))return;
   div.classList.add('busy');
   const wasDone=div.classList.contains('done');
-  const today=new Date().toISOString().slice(0,10);
   try{
-    const f=await getFile('HANDOFF.md');
-    let newStatus,msg;
-    if(!wasDone){ newStatus='✓ done '+today+' (tapped in the app)';
-      msg='To-do: '+it.title.slice(0,80)+' done (app)'; }
-    else{ newStatus=yPrev()[it.title]||('not done (un-done in the app '+today+')');
-      msg='To-do: '+it.title.slice(0,80)+' undone (app)'; }
-    const r=ySetStatus(f.text,it.title,newStatus);
-    if(!r)throw new Error('Could not find "'+it.title+'" in HANDOFF.md — the list may have been rebuilt; refresh and retry');
-    if(!wasDone)msg+='\n\nwas: Status: '+r.prev;
-    const sha=await putFile('HANDOFF.md',r.text,f.sha,msg);
-    S.files['HANDOFF.md']={path:'HANDOFF.md',text:r.text,sha};
-    if(!wasDone)yPrevSet(it.title,r.prev);else yPrevSet(it.title,null);
-    it.fields.status=newStatus;it.done=!wasDone;
-    div.classList.toggle('done',!wasDone);
-    const old=div.querySelector('.meta.st');const nh=yStatusHtml(newStatus);
-    if(old)old.outerHTML=nh;else div.querySelector('.body').insertAdjacentHTML('beforeend',nh);
-    const badge=document.getElementById('yours-n');
-    const open=(S.yours?S.yours.projects:[]).reduce((n,p)=>n+p.items.filter(x=>!x.done).length,0);
-    badge.textContent=open||'';
+    if(!wasDone)await yWrite(it,'✓ done '+todayISO()+' (tapped in the app)','done',true);
+    else await yWrite(it,yPrev()[it.title]||('not done (un-done in the app '+todayISO()+')'),'undone',false);
     toast(wasDone?'Back on your list.':'Done — written to HANDOFF.md. Tap again to undo.');
-  }catch(e){showErr(e);}
-  finally{div.classList.remove('busy');}
+    renderYours();
+  }catch(e){showErr(e);div.classList.remove('busy');}
 }
 /* tabs: Yours (opening view) / Today (everything the app had before) */
 function showTab(name){
